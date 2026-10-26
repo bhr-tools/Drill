@@ -1,0 +1,67 @@
+title = "Strings, the Stdlib way"
+tags = ["ocaml", "idiom", "strings"]
+target = 90
+signature = "capitalize_words(s: str) -> str"
+statement = """
+Capitalise the first letter of every word, the words being separated by single
+spaces: "hello functional world" gives "Hello Functional World".
+String.split_on_char, String.capitalize_ascii and String.concat do it all.
+"""
+hint = "s |> String.split_on_char ' ' |> List.map String.capitalize_ascii |> String.concat \" \""
+tests = [
+  { in = ["hello functional world"], out = "Hello Functional World" },
+  { in = [""], out = "" },
+  { in = ["ocaml"], out = "Ocaml" },
+  { in = ["a b"], out = "A B" },
+  { in = ["Already Done"], out = "Already Done" },
+]
+
+[solutions]
+ocaml = '''
+let capitalize_words s =
+  s |> String.split_on_char ' ' |> List.map String.capitalize_ascii |> String.concat " "
+'''
+
+[[variants]]
+signature = "parse_ints(s: str) -> list[int]"
+statement = """
+Parse a comma-separated list of integers with blanks around them:
+" 1, 2 ,-3" gives [1; 2; -3]. Empty items are skipped: "" and "4,,5" work.
+"""
+hint = "split_on_char ',', String.trim, List.filter_map with int_of_string_opt."
+tests = [
+  { in = [" 1, 2 ,-3"], out = [1, 2, -3] },
+  { in = [""], out = [] },
+  { in = ["4,,5"], out = [4, 5] },
+  { in = ["42"], out = [42] },
+  { in = [" , "], out = [] },
+]
+[variants.solutions]
+ocaml = '''
+let parse_ints s =
+  s |> String.split_on_char ',' |> List.map String.trim |> List.filter_map int_of_string_opt
+'''
+
+[[variants]]
+signature = "acronym(s: str) -> str"
+statement = """
+The acronym of a phrase: the first letter of each word, in upper case. Words are
+separated by spaces or hyphens: "portable network-graphics" gives "PNG".
+"""
+hint = "String.map to turn '-' into ' ', split, filter out \"\", String.init or Buffer."
+tests = [
+  { in = ["portable network-graphics"], out = "PNG" },
+  { in = [""], out = "" },
+  { in = ["objective caml"], out = "OC" },
+  { in = ["  spaced   out  "], out = "SO" },
+  { in = ["x-ray"], out = "XR" },
+]
+[variants.solutions]
+ocaml = '''
+let acronym s =
+  String.map (fun c -> if c = '-' then ' ' else c) s
+  |> String.split_on_char ' '
+  |> List.filter (fun w -> w <> "")
+  |> List.map (fun w -> String.make 1 (Char.uppercase_ascii w.[0]))
+  |> String.concat ""
+'''

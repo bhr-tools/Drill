@@ -1,0 +1,64 @@
+title = "Merge two sorted arrays"
+tags = ["two-pointers", "array"]
+target = 90
+signature = "merge_sorted(a: list[int], b: list[int]) -> list[int]"
+statement = """
+a and b are sorted in ascending order. Return all their elements, sorted,
+in O(len(a) + len(b)) — without sorting the concatenation.
+"""
+hint = "One index per array; always take the smaller head, then append the leftovers."
+complexity = "O(n)"
+tests = [
+  { in = [[1, 3, 5], [2, 4, 6]], out = [1, 2, 3, 4, 5, 6] },
+  { in = [[], [1]], out = [1] },
+  { in = [[1, 2], []], out = [1, 2] },
+  { in = [[1, 1, 2], [1, 3]], out = [1, 1, 1, 2, 3] },
+  { in = [[-5, 0], [-6, 10]], out = [-6, -5, 0, 10] },
+  { in = [[], []], out = [] },
+]
+
+[solutions]
+ocaml = '''
+let rec merge_sorted a b =
+  match a, b with
+  | [], rest | rest, [] -> rest
+  | x :: xs, y :: _ when x <= y -> x :: merge_sorted xs b
+  | _, y :: ys -> y :: merge_sorted a ys
+'''
+python = '''
+def merge_sorted(a: list[int], b: list[int]) -> list[int]:
+    out, i, j = [], 0, 0
+    while i < len(a) and j < len(b):
+        if a[i] <= b[j]:
+            out.append(a[i])
+            i += 1
+        else:
+            out.append(b[j])
+            j += 1
+    return out + a[i:] + b[j:]
+'''
+cpp = '''
+vector<int> mergeSorted(vector<int>& a, vector<int>& b) {
+    vector<int> out;
+    out.reserve(a.size() + b.size());
+    size_t i = 0, j = 0;
+    while (i < a.size() && j < b.size()) out.push_back(a[i] <= b[j] ? a[i++] : b[j++]);
+    out.insert(out.end(), a.begin() + i, a.end());
+    out.insert(out.end(), b.begin() + j, b.end());
+    return out;
+}
+'''
+java = '''
+public int[] mergeSorted(int[] a, int[] b) {
+    int[] out = new int[a.length + b.length];
+    int i = 0, j = 0, k = 0;
+    while (i < a.length && j < b.length) out[k++] = a[i] <= b[j] ? a[i++] : b[j++];
+    while (i < a.length) out[k++] = a[i++];
+    while (j < b.length) out[k++] = b[j++];
+    return out;
+}
+'''
+
+[scale]
+label = "n = len(a) = len(b)"
+in = "[sorted(rng.randint(-10**9, 10**9) for _ in range(n)), sorted(rng.randint(-10**9, 10**9) for _ in range(n))]"

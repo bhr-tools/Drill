@@ -1,0 +1,122 @@
+title = "Counting pairs under a limit"
+tags = ["optim", "sorting", "two-pointers"]
+target = 480
+signature = "count_pairs(nums: list[int], limit: int) -> long"
+complexity = "O(n log n)"
+statement = """
+count_pairs(nums, limit) is the number of pairs i < j with nums[i] + nums[j] <= limit.
+
+The code you start with is correct, but too slow for the performance test.
+1. Estimate its complexity, then press c to measure it.
+2. Make it fast enough, and measure again.
+"""
+hint = "Sort first: if the smallest plus the largest fits, the smallest pairs with everything in between."
+explanation = """
+Testing every pair is O(n²). The answer does not depend on the order of the
+elements, since pairs are unordered, so we may sort, and sorting makes the
+condition monotonic: if a[lo] + a[hi] <= limit, then a[lo] + a[j] <= limit for
+every j between lo and hi.
+
+Two pointers then count in a single pass over the sorted array:
+- if a[lo] + a[hi] <= limit: the hi - lo pairs (lo, lo + 1..hi) all fit; lo += 1;
+- else a[hi] is too large for every remaining lo: hi -= 1.
+Each step moves one pointer, so the pass is O(n); with the sort, O(n log n).
+
+This is a pattern worth recognizing: when a property becomes monotonic once the
+data is sorted, sorting plus two pointers (or a binary search per element, also
+O(n log n)) replaces the inner loop. The count can reach n²/2, so it needs a 64-bit
+integer in C++ and Java.
+"""
+tests = [
+  { in = [[1, 2, 3, 4], 5], out = 4 },
+  { in = [[5, 5], 10], out = 1 },
+  { in = [[5, 5], 9], out = 0 },
+  { in = [[], 3], out = 0 },
+  { in = [[-1, 0, 1], 0], out = 2 },
+  { in = [[3, 1, 2, 2], 4], out = 4 },
+]
+
+[starter]
+python = '''
+def count_pairs(nums: list[int], limit: int) -> int:
+    count = 0
+    for i in range(len(nums)):
+        for j in range(i + 1, len(nums)):
+            if nums[i] + nums[j] <= limit:
+                count += 1
+    return count
+'''
+cpp = '''
+#include <bits/stdc++.h>
+using namespace std;
+
+
+            long long countPairs(vector<int>& nums, int limit) {
+                long long count = 0;
+                for (size_t i = 0; i < nums.size(); ++i)
+                    for (size_t j = i + 1; j < nums.size(); ++j)
+                        if (nums[i] + nums[j] <= limit) ++count;
+                return count;
+            }
+'''
+java = '''
+import java.util.*;
+
+
+            class Solution {
+                public long countPairs(int[] nums, int limit) {
+                    long count = 0;
+                    for (int i = 0; i < nums.length; i++)
+                        for (int j = i + 1; j < nums.length; j++)
+                            if (nums[i] + nums[j] <= limit) count++;
+                    return count;
+                }
+            }
+'''
+
+[solutions]
+python = '''
+def count_pairs(nums: list[int], limit: int) -> int:
+    a = sorted(nums)
+    lo, hi, count = 0, len(a) - 1, 0
+    while lo < hi:
+        if a[lo] + a[hi] <= limit:
+            count += hi - lo
+            lo += 1
+        else:
+            hi -= 1
+    return count
+'''
+cpp = '''
+long long countPairs(vector<int>& nums, int limit) {
+    sort(nums.begin(), nums.end());
+    long long count = 0;
+    int lo = 0, hi = (int)nums.size() - 1;
+    while (lo < hi) {
+        if (nums[lo] + nums[hi] <= limit) count += hi - lo++;
+        else --hi;
+    }
+    return count;
+}
+'''
+java = '''
+public long countPairs(int[] nums, int limit) {
+    int[] a = nums.clone();
+    Arrays.sort(a);
+    long count = 0;
+    int lo = 0, hi = a.length - 1;
+    while (lo < hi) {
+        if (a[lo] + a[hi] <= limit) count += hi - lo++;
+        else hi--;
+    }
+    return count;
+}
+'''
+
+[[perf]]
+label = "n = 200 000"
+in = "[[rng.randint(-10**6, 10**6) for _ in range(200_000)], 0]"
+
+[scale]
+label = "n = len(nums)"
+in = "[[rng.randint(-10**6, 10**6) for _ in range(n)], 0]"

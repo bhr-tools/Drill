@@ -1,0 +1,189 @@
+title = "Exploring a NixOS flake in the REPL"
+kind = "code"
+file = "answer.nix"
+tags = ["nix", "repl", "nixos", "flakes"]
+target = 240
+statement = """
+This folder holds a flake with a NixOS configuration, server, spread over
+several modules. Without reading the modules, find the answer with the REPL:
+  nix repl
+  :lf .
+  nixosConfigurations.server.config.<TAB>
+Which TCP ports does server's firewall open, all modules merged (some come from
+options that open the firewall themselves)? Write the answer in answer.nix as a
+sorted list of integers, e.g. [ 1 2 3 ].
+"""
+hint = "nixosConfigurations.server.config.networking.firewall.allowedTCPPorts, then sort it (lib.sort, or builtins.sort builtins.lessThan)."
+explanation = """
+`:lf .` loads the flake of the current folder and brings its outputs into scope.
+config is the result of merging every module: a list option such as
+allowedTCPPorts is the concatenation of every definition, including the ones
+made by other modules (services.openssh.openFirewall adds its ports). Reading
+one file never tells the whole story: evaluating config does.
+
+Useful in the REPL: TAB completion, :p to print a value fully, :doc on a lib
+function, :e to open the file that defines a function or a package.
+"""
+
+[files]
+"flake.nix" = '''
+{
+  inputs.nixpkgs.url = "path:@NIXPKGS@";
+
+  outputs = { self, nixpkgs }: {
+    nixosConfigurations.server = nixpkgs.lib.nixosSystem {
+      modules = [ ./hosts/server.nix ./modules/web.nix ./modules/users.nix ];
+    };
+  };
+}
+'''
+"hosts/server.nix" = '''
+{ lib, ... }:
+{
+  nixpkgs.hostPlatform = "x86_64-linux";
+  boot.loader.grub.enable = false;
+  fileSystems."/" = { device = "/dev/disk/by-label/nixos"; fsType = "ext4"; };
+  system.stateVersion = "25.05";
+
+  networking.hostName = "atlas";
+  services.openssh = {
+    enable = true;
+    ports = [ 2222 ];
+    settings.PermitRootLogin = "no";
+  };
+  networking.firewall.allowedTCPPorts = [ 9100 ];
+}
+'''
+"modules/web.nix" = '''
+{ config, ... }:
+{
+  services.nginx = {
+    enable = true;
+    virtualHosts."blog.example.org" = {
+      root = "/srv/blog";
+      listen = [ { addr = "0.0.0.0"; port = 8080; } ];
+    };
+  };
+  networking.firewall.allowedTCPPorts = [ 80 443 8080 ];
+}
+'''
+"modules/users.nix" = '''
+{ pkgs, ... }:
+{
+  users.users = {
+    alice = { isNormalUser = true; extraGroups = [ "wheel" "networkmanager" ]; };
+    bob = { isNormalUser = true; extraGroups = [ "video" ]; };
+    carol = { isNormalUser = true; extraGroups = [ "wheel" ]; shell = pkgs.zsh; };
+    deploy = { isSystemUser = true; group = "deploy"; };
+  };
+  users.groups.deploy = { };
+  programs.zsh.enable = true;
+}
+'''
+
+[starter]
+nix = '''
+null
+'''
+
+[setup]
+nix = '''
+config = (loadFlake dir).nixosConfigurations.server.config;
+answer = import file;
+'''
+
+[checks]
+nix = '''
+(check "the open TCP ports" answer (lib.sort lib.lessThan (lib.unique config.networking.firewall.allowedTCPPorts)))
+'''
+
+[solutions]
+nix = '''
+[ 80 443 2222 8080 9100 ]
+'''
+
+[[variants]]
+statement = """
+This folder holds a flake with a NixOS configuration, server, spread over
+several modules. Find the answer with the REPL (nix repl, then :lf .):
+which users of server are normal users (isNormalUser), and which of them are
+in the wheel group? Write in answer.nix:
+  { normal = [ … ]; wheel = [ … ]; }
+both sorted lists of user names.
+"""
+hint = "lib.attrNames (lib.filterAttrs (n: u: u.isNormalUser) nixosConfigurations.server.config.users.users)"
+[variants.checks]
+nix = '''
+(check "normal users" (answer.normal or null) (lib.attrNames (lib.filterAttrs (n: u: u.isNormalUser) config.users.users)))
+(check "in wheel" (answer.wheel or null) (lib.attrNames (lib.filterAttrs (n: u: u.isNormalUser && builtins.elem "wheel" u.extraGroups) config.users.users)))
+'''
+[variants.solutions]
+nix = '''
+{
+  normal = [ "alice" "bob" "carol" ];
+  wheel = [ "alice" "carol" ];
+}
+'''
+
+[[variants]]
+statement = """
+This folder holds a flake with a NixOS configuration, server. Find the answers
+with the REPL (nix repl, then :lf .), and write in answer.nix:
+  { nginxVersion = "…"; gzipByDefault = …; }
+- nginxVersion: the version of the nginx package server would run;
+- gzipByDefault: the default value of the option services.nginx.recommendedGzipSettings
+  (options, not config: the option's declaration knows its default).
+"""
+hint = "config.services.nginx.package.version, and options.services.nginx.recommendedGzipSettings.default"
+[variants.setup]
+nix = '''
+server = (loadFlake dir).nixosConfigurations.server;
+answer = import file;
+'''
+[variants.checks]
+nix = '''
+(check "nginx version" (answer.nginxVersion or null) server.config.services.nginx.package.version)
+(check "recommendedGzipSettings default" (answer.gzipByDefault or null) server.options.services.nginx.recommendedGzipSettings.default)
+'''
+[variants.solutions]
+nix = '''
+# The answer depends on the nixpkgs revision: computed rather than copied
+let
+  server = (builtins.getFlake "path:${toString ./.}").nixosConfigurations.server;
+in
+{
+  nginxVersion = server.config.services.nginx.package.version;
+  gzipByDefault = server.options.services.nginx.recommendedGzipSettings.default;
+}
+'''
+
+[[variants]]
+statement = """
+This folder holds a flake with a NixOS configuration, server. With the REPL
+(nix repl, then :lf .), find in which file of this flake the option
+networking.firewall.allowedTCPPorts is defined, for each definition, and write
+the paths relative to the flake, sorted, in answer.nix: [ "a.nix" "b.nix" ].
+Only count the files of this flake, not the ones of nixpkgs.
+"""
+hint = "options.networking.firewall.allowedTCPPorts.definitionsWithLocations: each has a file."
+explanation = """
+Every option records where it was declared (declarations) and where it was set
+(files, definitionsWithLocations): the way to answer "who sets this?" in a large
+configuration. In the REPL, the files are in the store copy of the flake, so
+strip that prefix. nixos-option and the NixOS manual's option search give the same
+information from the command line and the web.
+"""
+[variants.setup]
+nix = '''
+server = (loadFlake dir).nixosConfigurations.server;
+answer = import file;
+here = toString dir + "/";
+'''
+[variants.checks]
+nix = '''
+(check "the files" answer (lib.sort lib.lessThan (lib.unique (map (d: lib.removePrefix here (toString d.file)) (builtins.filter (d: lib.hasPrefix here (toString d.file)) server.options.networking.firewall.allowedTCPPorts.definitionsWithLocations)))))
+'''
+[variants.solutions]
+nix = '''
+[ "hosts/server.nix" "modules/web.nix" ]
+'''

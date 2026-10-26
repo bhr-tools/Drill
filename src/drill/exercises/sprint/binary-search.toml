@@ -1,0 +1,174 @@
+title = "Binary search"
+tags = ["binary-search"]
+target = 90
+signature = "binary_search(nums: list[int], target: int) -> int"
+statement = """
+nums is sorted in ascending order and has no duplicates. Return the index of
+target, or -1 if it is absent. Write the search by hand (no bisect,
+lower_bound or Arrays.binarySearch).
+"""
+hint = "lo = 0, hi = n - 1, loop while lo <= hi; move lo to mid + 1 or hi to mid - 1."
+tests = [
+  { in = [[-1, 0, 3, 5, 9, 12], 9], out = 4 },
+  { in = [[-1, 0, 3, 5, 9, 12], 2], out = -1 },
+  { in = [[5], 5], out = 0 },
+  { in = [[], 1], out = -1 },
+  { in = [[1, 3], 3], out = 1 },
+  { in = [[1, 3], 0], out = -1 },
+  { in = [[2, 4, 6, 8, 10, 12, 14], 2], out = 0 },
+  { in = [[2, 4, 6, 8, 10, 12, 14], 15], out = -1 },
+]
+
+[solutions]
+python = '''
+def binary_search(nums: list[int], target: int) -> int:
+    lo, hi = 0, len(nums) - 1
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        if nums[mid] == target:
+            return mid
+        if nums[mid] < target:
+            lo = mid + 1
+        else:
+            hi = mid - 1
+    return -1
+'''
+cpp = '''
+int binarySearch(vector<int>& nums, int target) {
+    int lo = 0, hi = (int)nums.size() - 1;
+    while (lo <= hi) {
+        int mid = lo + (hi - lo) / 2;
+        if (nums[mid] == target) return mid;
+        if (nums[mid] < target) lo = mid + 1;
+        else hi = mid - 1;
+    }
+    return -1;
+}
+'''
+java = '''
+public int binarySearch(int[] nums, int target) {
+    int lo = 0, hi = nums.length - 1;
+    while (lo <= hi) {
+        int mid = (lo + hi) >>> 1;
+        if (nums[mid] == target) return mid;
+        if (nums[mid] < target) lo = mid + 1;
+        else hi = mid - 1;
+    }
+    return -1;
+}
+'''
+
+
+[[variants]]
+title = "Lower bound"
+signature = "lower_bound(nums: list[int], target: int) -> int"
+statement = """
+nums is sorted in ascending order and may have duplicates. Return the first
+index i such that nums[i] >= target, or len(nums) if there is none. Write the
+search by hand (no bisect, lower_bound or Arrays.binarySearch).
+"""
+hint = "Half-open range [lo, hi) with hi = n: if nums[mid] < target then lo = mid + 1 else hi = mid."
+tests = [
+  { in = [[1, 2, 2, 2, 5], 2], out = 1 },
+  { in = [[1, 2, 2, 2, 5], 3], out = 4 },
+  { in = [[1, 2, 2, 2, 5], 9], out = 5 },
+  { in = [[1, 2, 2, 2, 5], -4], out = 0 },
+  { in = [[], 1], out = 0 },
+  { in = [[7, 7, 7], 7], out = 0 },
+]
+[variants.solutions]
+python = '''
+def lower_bound(nums, target):
+    lo, hi = 0, len(nums)
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if nums[mid] < target:
+            lo = mid + 1
+        else:
+            hi = mid
+    return lo
+'''
+cpp = '''
+int lowerBound(vector<int>& nums, int target) {
+    int lo = 0, hi = nums.size();
+    while (lo < hi) {
+        int mid = lo + (hi - lo) / 2;
+        if (nums[mid] < target) lo = mid + 1;
+        else hi = mid;
+    }
+    return lo;
+}
+'''
+java = '''
+public int lowerBound(int[] nums, int target) {
+    int lo = 0, hi = nums.length;
+    while (lo < hi) {
+        int mid = (lo + hi) >>> 1;
+        if (nums[mid] < target) lo = mid + 1;
+        else hi = mid;
+    }
+    return lo;
+}
+'''
+
+[[variants]]
+title = "Last occurrence"
+signature = "last_occurrence(nums: list[int], target: int) -> int"
+statement = """
+nums is sorted in ascending order and may have duplicates. Return the index of
+the last occurrence of target, or -1 if it is absent, in O(log n). Write the
+search by hand.
+"""
+hint = "Keep searching right of a match: remember mid, then lo = mid + 1."
+tests = [
+  { in = [[1, 2, 2, 2, 5], 2], out = 3 },
+  { in = [[1, 2, 2, 2, 5], 3], out = -1 },
+  { in = [[1, 2, 2, 2, 5], 5], out = 4 },
+  { in = [[], 1], out = -1 },
+  { in = [[7, 7, 7], 7], out = 2 },
+  { in = [[4], 4], out = 0 },
+]
+[variants.solutions]
+python = '''
+def last_occurrence(nums, target):
+    lo, hi, found = 0, len(nums) - 1, -1
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        if nums[mid] <= target:
+            if nums[mid] == target:
+                found = mid
+            lo = mid + 1
+        else:
+            hi = mid - 1
+    return found
+'''
+cpp = '''
+int lastOccurrence(vector<int>& nums, int target) {
+    int lo = 0, hi = (int)nums.size() - 1, found = -1;
+    while (lo <= hi) {
+        int mid = lo + (hi - lo) / 2;
+        if (nums[mid] <= target) {
+            if (nums[mid] == target) found = mid;
+            lo = mid + 1;
+        } else {
+            hi = mid - 1;
+        }
+    }
+    return found;
+}
+'''
+java = '''
+public int lastOccurrence(int[] nums, int target) {
+    int lo = 0, hi = nums.length - 1, found = -1;
+    while (lo <= hi) {
+        int mid = (lo + hi) >>> 1;
+        if (nums[mid] <= target) {
+            if (nums[mid] == target) found = mid;
+            lo = mid + 1;
+        } else {
+            hi = mid - 1;
+        }
+    }
+    return found;
+}
+'''

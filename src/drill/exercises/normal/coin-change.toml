@@ -1,0 +1,67 @@
+title = "Coin change"
+tags = ["dp"]
+target = 420
+signature = "coin_change(coins: list[int], amount: int) -> int"
+statement = """
+With an unlimited number of coins of each value in coins, return the fewest
+coins that add up to amount, or -1 if it cannot be done.
+"""
+hint = "Bottom-up DP: best[a] = 1 + min(best[a - c]) over the coins c <= a."
+complexity = "O(n)"
+tests = [
+  { in = [[1, 2, 5], 11], out = 3 },
+  { in = [[2], 3], out = -1 },
+  { in = [[1], 0], out = 0 },
+  { in = [[1], 2], out = 2 },
+  { in = [[2, 5, 10, 1], 27], out = 4 },
+  { in = [[186, 419, 83, 408], 6249], out = 20 },
+  { in = [[3, 7], 5], out = -1 },
+  { in = [[4, 5], 8], out = 2 },
+]
+
+[solutions]
+python = '''
+def coin_change(coins: list[int], amount: int) -> int:
+    impossible = amount + 1
+    best = [0] + [impossible] * amount
+    for a in range(1, amount + 1):
+        for c in coins:
+            if c <= a:
+                best[a] = min(best[a], best[a - c] + 1)
+    return best[amount] if best[amount] != impossible else -1
+'''
+cpp = '''
+int coinChange(vector<int>& coins, int amount) {
+    const int impossible = amount + 1;
+    vector<int> best(amount + 1, impossible);
+    best[0] = 0;
+    for (int a = 1; a <= amount; ++a)
+        for (int c : coins)
+            if (c <= a) best[a] = min(best[a], best[a - c] + 1);
+    return best[amount] == impossible ? -1 : best[amount];
+}
+'''
+java = '''
+public int coinChange(int[] coins, int amount) {
+    int impossible = amount + 1;
+    int[] best = new int[amount + 1];
+    Arrays.fill(best, impossible);
+    best[0] = 0;
+    for (int a = 1; a <= amount; a++)
+        for (int c : coins)
+            if (c <= a) best[a] = Math.min(best[a], best[a - c] + 1);
+    return best[amount] == impossible ? -1 : best[amount];
+}
+'''
+
+[[perf]]
+label = "amount = 9 999, 8 coins"
+in = "[[3, 7, 11, 19, 23, 37, 41, 53], 9_999]"
+
+[[perf]]
+label = "amount = 9 999, impossible"
+in = "[[6, 10, 14], 9_999]"
+
+[scale]
+label = "n = amount, 8 coins"
+in = "[[3, 7, 11, 19, 23, 37, 41, 53], n]"

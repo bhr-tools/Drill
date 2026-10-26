@@ -1,0 +1,59 @@
+title = "Top k frequent elements"
+tags = ["hashmap", "sorting", "heap"]
+target = 300
+signature = "top_k_frequent(nums: list[int], k: int) -> list[int]"
+statement = """
+Return the k most frequent values of nums, from most to least frequent.
+Values with the same frequency are ordered from smallest to largest.
+"""
+hint = "Count, then sort the distinct values by (-count, value) — or keep a heap of size k."
+complexity = "O(n log n)"
+tests = [
+  { in = [[1, 1, 1, 2, 2, 3], 2], out = [1, 2] },
+  { in = [[1], 1], out = [1] },
+  { in = [[4, 4, -1, -1, 2], 2], out = [-1, 4] },
+  { in = [[5, 3, 5, 3, 7, 7, 7], 3], out = [7, 3, 5] },
+  { in = [[1, 2, 3, 4], 2], out = [1, 2] },
+]
+
+[solutions]
+python = '''
+from collections import Counter
+
+def top_k_frequent(nums: list[int], k: int) -> list[int]:
+    counts = Counter(nums)
+    return sorted(counts, key=lambda x: (-counts[x], x))[:k]
+'''
+cpp = '''
+vector<int> topKFrequent(vector<int>& nums, int k) {
+    unordered_map<int, int> counts;
+    for (int x : nums) ++counts[x];
+    vector<pair<int, int>> order;  // (-count, value) sorts in the wanted order
+    for (auto [x, n] : counts) order.push_back({-n, x});
+    sort(order.begin(), order.end());
+    vector<int> out;
+    for (int i = 0; i < k; ++i) out.push_back(order[i].second);
+    return out;
+}
+'''
+java = '''
+public int[] topKFrequent(int[] nums, int k) {
+    Map<Integer, Integer> counts = new HashMap<>();
+    for (int x : nums) counts.merge(x, 1, Integer::sum);
+    return counts.keySet().stream()
+        .sorted((a, b) -> counts.get(a).equals(counts.get(b))
+            ? Integer.compare(a, b)
+            : Integer.compare(counts.get(b), counts.get(a)))
+        .limit(k)
+        .mapToInt(Integer::intValue)
+        .toArray();
+}
+'''
+
+[[perf]]
+label = "n = 200 000, k = 10"
+in = "[[rng.randint(1, 50_000) for _ in range(200_000)], 10]"
+
+[scale]
+label = "n = len(nums), k = 10"
+in = "[[rng.randint(1, n // 4 + 10) for _ in range(n)], 10]"

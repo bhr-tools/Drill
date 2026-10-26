@@ -1,0 +1,69 @@
+title = "Daily temperatures"
+tags = ["monotonic-stack"]
+target = 360
+signature = "daily_temperatures(temps: list[int]) -> list[int]"
+statement = """
+For each day, return how many days you must wait for a strictly warmer
+temperature, or 0 if it never comes. Aim for O(n).
+"""
+hint = "Keep a stack of indices still waiting for a warmer day; each new day resolves the colder ones on top."
+complexity = "O(n)"
+tests = [
+  { in = [[73, 74, 75, 71, 69, 72, 76, 73]], out = [1, 1, 4, 2, 1, 1, 0, 0] },
+  { in = [[30, 40, 50, 60]], out = [1, 1, 1, 0] },
+  { in = [[30, 60, 90]], out = [1, 1, 0] },
+  { in = [[50]], out = [0] },
+  { in = [[70, 70, 70]], out = [0, 0, 0] },
+  { in = [[60, 50, 40, 70]], out = [3, 2, 1, 0] },
+]
+
+[solutions]
+python = '''
+def daily_temperatures(temps: list[int]) -> list[int]:
+    answer = [0] * len(temps)
+    waiting = []  # indices of colder days, temperatures decreasing
+    for i, t in enumerate(temps):
+        while waiting and temps[waiting[-1]] < t:
+            j = waiting.pop()
+            answer[j] = i - j
+        waiting.append(i)
+    return answer
+'''
+cpp = '''
+vector<int> dailyTemperatures(vector<int>& temps) {
+    vector<int> answer(temps.size()), waiting;
+    for (int i = 0; i < (int)temps.size(); ++i) {
+        while (!waiting.empty() && temps[waiting.back()] < temps[i]) {
+            answer[waiting.back()] = i - waiting.back();
+            waiting.pop_back();
+        }
+        waiting.push_back(i);
+    }
+    return answer;
+}
+'''
+java = '''
+public int[] dailyTemperatures(int[] temps) {
+    int[] answer = new int[temps.length];
+    Deque<Integer> waiting = new ArrayDeque<>();
+    for (int i = 0; i < temps.length; i++) {
+        while (!waiting.isEmpty() && temps[waiting.peek()] < temps[i]) {
+            int j = waiting.pop();
+            answer[j] = i - j;
+        }
+        waiting.push(i);
+    }
+    return answer;
+}
+'''
+
+[[perf]]
+label = "n = 200 000, falling until the last day"
+code = '''
+temps = sorted((rng.randint(30, 10**6) for _ in range(199_999)), reverse=True)
+args = [temps + [10**6 + 1]]
+'''
+
+[scale]
+label = "n = number of days, temperatures falling until the last one"
+in = "[sorted((rng.randint(30, 10**6) for _ in range(n - 1)), reverse=True) + [10**6 + 1]]"

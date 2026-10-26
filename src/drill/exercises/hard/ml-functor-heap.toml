@@ -1,0 +1,136 @@
+title = "A priority queue functor"
+kind = "code"
+tags = ["ocaml", "functor", "heap", "modules", "persistence"]
+target = 900
+statement = """
+Write the functor Make (Ord : ORDERED) returning a persistent (immutable) min-heap,
+a leftist heap or a pairing heap:
+
+module type ORDERED = sig type t val compare : t -> t -> int end
+
+module Make (Ord : ORDERED) : sig
+  type elt = Ord.t
+  type t
+  val empty : t
+  val is_empty : t -> bool
+  val push : elt -> t -> t
+  val pop : t -> (elt * t) option      (* the smallest element and the rest *)
+  val of_list : elt list -> t
+  val to_sorted_list : t -> elt list
+end
+
+push and pop are O(log n). The heap is persistent: pushing onto a heap leaves
+the old one usable.
+"""
+hint = "Leftist heap: type t = E | T of int * elt * t * t (rank first); everything is merge."
+explanation = """
+A functor makes the heap generic over its ordering with no runtime cost and no
+polymorphic compare: Make (Int) and Make (struct type t = int let compare a b =
+compare b a end) are two different modules, with two incompatible types t, so a
+max-heap can never be mixed up with a min-heap.
+
+A leftist heap keeps, at every node, the rank (length of the right spine) of the
+left child at least that of the right one, so the right spine has O(log n)
+nodes. merge walks only the right spines and swaps children to restore the
+invariant: push is merge with a singleton, pop merges the two children of the
+root. As nothing is mutated, every old version stays valid: persistence for free.
+"""
+
+[starter]
+ocaml = '''
+module type ORDERED = sig
+  type t
+
+  val compare : t -> t -> int
+end
+
+module Make (Ord : ORDERED) : sig
+  type elt = Ord.t
+  type t
+
+  val empty : t
+  val is_empty : t -> bool
+  val push : elt -> t -> t
+  val pop : t -> (elt * t) option
+  val of_list : elt list -> t
+  val to_sorted_list : t -> elt list
+end = struct
+  type elt = Ord.t
+  type t = unit (* your representation *)
+
+  let empty = failwith "todo"
+  let is_empty h = failwith "todo"
+  let push x h = failwith "todo"
+  let pop h = failwith "todo"
+  let of_list xs = failwith "todo"
+  let to_sorted_list h = failwith "todo"
+end
+'''
+
+[checks]
+ocaml = '''
+let module H = Make (Int) in
+let show = Show.(list int) in
+check "empty" (H.is_empty H.empty);
+check_eq ~show "sorts" (H.to_sorted_list (H.of_list [ 5; 1; 4; 1; 3 ])) [ 1; 1; 3; 4; 5 ];
+check "pop empty" (H.pop H.empty = None);
+(match H.pop (H.of_list [ 7; 2; 9 ]) with
+ | Some (x, rest) ->
+     check_eq ~show:Show.int "pop min" x 2;
+     check_eq ~show "rest" (H.to_sorted_list rest) [ 7; 9 ]
+ | None -> check "pop" false);
+let h1 = H.of_list [ 3; 1 ] in
+let h2 = H.push 0 h1 in
+check_eq ~show "persistent: old heap intact" (H.to_sorted_list h1) [ 1; 3 ];
+check_eq ~show "persistent: new heap" (H.to_sorted_list h2) [ 0; 1; 3 ];
+let module Max = Make (struct type t = int let compare a b = compare b a end) in
+check_eq ~show "another ordering" (Max.to_sorted_list (Max.of_list [ 2; 9; 4 ])) [ 9; 4; 2 ];
+let module S = Make (String) in
+check_eq ~show:Show.(list string) "strings" (S.to_sorted_list (S.of_list [ "b"; "c"; "a" ])) [ "a"; "b"; "c" ];
+let n = 200_000 in
+let big = List.init n (fun i -> (i * 7919) mod n) in
+check_eq ~show:Show.int "200 000 elements, O(n log n)" (List.length (H.to_sorted_list (H.of_list big))) n;
+'''
+
+[solutions]
+ocaml = '''
+module type ORDERED = sig
+  type t
+
+  val compare : t -> t -> int
+end
+
+module Make (Ord : ORDERED) : sig
+  type elt = Ord.t
+  type t
+
+  val empty : t
+  val is_empty : t -> bool
+  val push : elt -> t -> t
+  val pop : t -> (elt * t) option
+  val of_list : elt list -> t
+  val to_sorted_list : t -> elt list
+end = struct
+  type elt = Ord.t
+  type t = E | T of int * elt * t * t
+
+  let rank = function E -> 0 | T (r, _, _, _) -> r
+  let node x a b = if rank a >= rank b then T (rank b + 1, x, a, b) else T (rank a + 1, x, b, a)
+
+  let rec merge h1 h2 =
+    match (h1, h2) with
+    | E, h | h, E -> h
+    | T (_, x, a1, b1), T (_, y, _, _) when Ord.compare x y <= 0 -> node x a1 (merge b1 h2)
+    | _, T (_, y, a2, b2) -> node y a2 (merge h1 b2)
+
+  let empty = E
+  let is_empty h = h = E
+  let push x h = merge (T (1, x, E, E)) h
+  let pop = function E -> None | T (_, x, a, b) -> Some (x, merge a b)
+  let of_list xs = List.fold_left (fun h x -> push x h) E xs
+
+  let to_sorted_list h =
+    let rec go acc h = match pop h with None -> List.rev acc | Some (x, h) -> go (x :: acc) h in
+    go [] h
+end
+'''

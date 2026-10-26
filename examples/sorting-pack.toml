@@ -1,0 +1,493 @@
+[pack]
+name = "Sorting and searching"
+description = "Example pack: elementary sorts, binary search and its variants, merge sort and heaps, as an introductory algorithms course teaches them."
+
+[[exercises]]
+id = "insertion-sort"
+mode = "sprint"
+title = "Insertion sort"
+tags = ["sorting", "insertion-sort"]
+target = 120
+signature = "insertion_sort(nums: list[int]) -> list[int]"
+statement = """
+Sort nums in ascending order with insertion sort, in place, and return it.
+Do not call a library sort.
+"""
+hint = "For each i, shift the larger elements of nums[0..i-1] one slot right, then drop nums[i] in the gap."
+tests = [
+  { in = [[5, 2, 4, 6, 1, 3]], out = [1, 2, 3, 4, 5, 6] },
+  { in = [[]], out = [] },
+  { in = [[1]], out = [1] },
+  { in = [[3, 3, 1]], out = [1, 3, 3] },
+  { in = [[-1, -5, 0]], out = [-5, -1, 0] },
+]
+
+[exercises.solutions]
+python = '''
+def insertion_sort(nums):
+    for i in range(1, len(nums)):
+        x, j = nums[i], i - 1
+        while j >= 0 and nums[j] > x:
+            nums[j + 1] = nums[j]
+            j -= 1
+        nums[j + 1] = x
+    return nums
+'''
+cpp = '''
+vector<int> insertionSort(vector<int>& nums) {
+    for (size_t i = 1; i < nums.size(); ++i) {
+        int x = nums[i];
+        size_t j = i;
+        while (j > 0 && nums[j - 1] > x) {
+            nums[j] = nums[j - 1];
+            --j;
+        }
+        nums[j] = x;
+    }
+    return nums;
+}
+'''
+
+[[exercises]]
+id = "lower-bound"
+mode = "sprint"
+title = "Lower bound"
+tags = ["binary-search"]
+target = 120
+signature = "lower_bound(nums: list[int], x: int) -> int"
+statement = """
+nums is sorted in ascending order. Return the first index i such that
+nums[i] >= x, or len(nums) if there is none. Write the binary search yourself.
+"""
+hint = "Search the half-open range [lo, hi): if nums[mid] < x, lo = mid + 1, else hi = mid."
+tests = [
+  { in = [[1, 2, 4, 4, 7], 4], out = 2 },
+  { in = [[1, 2, 4, 4, 7], 5], out = 4 },
+  { in = [[1, 2, 4, 4, 7], 0], out = 0 },
+  { in = [[1, 2, 4, 4, 7], 8], out = 5 },
+  { in = [[], 3], out = 0 },
+  { in = [[2, 2, 2], 2], out = 0 },
+]
+
+[exercises.solutions]
+python = '''
+def lower_bound(nums, x):
+    lo, hi = 0, len(nums)
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if nums[mid] < x:
+            lo = mid + 1
+        else:
+            hi = mid
+    return lo
+'''
+cpp = '''
+int lowerBound(vector<int>& nums, int x) {
+    int lo = 0, hi = nums.size();
+    while (lo < hi) {
+        int mid = lo + (hi - lo) / 2;
+        if (nums[mid] < x) lo = mid + 1;
+        else hi = mid;
+    }
+    return lo;
+}
+'''
+
+[[exercises]]
+id = "count-inversions"
+mode = "normal"
+title = "Counting inversions"
+tags = ["merge-sort", "divide-and-conquer"]
+target = 600
+signature = "count_inversions(nums: list[int]) -> long"
+statement = """
+An inversion is a pair i < j with nums[i] > nums[j]. Return the number of
+inversions of nums, in O(n log n).
+"""
+hint = "Merge sort: when an element of the right half is placed before the rest of the left half, it forms an inversion with each of them."
+explanation = """
+Comparing every pair is O(n²). Merge sort counts them while it sorts: during the
+merge of two sorted halves L and R, when R[j] is placed before L[i], it is smaller
+than L[i] and than every element after it in L, so it forms len(L) - i inversions
+at once. Inversions inside each half are counted by the recursive calls, and
+those across the halves by the merge: the total is exact.
+
+The recursion has log n levels, each merging n elements: O(n log n), the
+complexity of merge sort itself. The count can reach n(n-1)/2, hence a 64-bit
+result.
+"""
+complexity = "O(n log n)"
+tests = [
+  { in = [[2, 4, 1, 3, 5]], out = 3 },
+  { in = [[]], out = 0 },
+  { in = [[1, 2, 3]], out = 0 },
+  { in = [[3, 2, 1]], out = 3 },
+  { in = [[1, 1, 1]], out = 0 },
+  { in = [[5, 4, 3, 2, 1]], out = 10 },
+]
+
+[exercises.solutions]
+python = '''
+def count_inversions(nums):
+    def sort(a):
+        if len(a) <= 1:
+            return a, 0
+        mid = len(a) // 2
+        left, x = sort(a[:mid])
+        right, y = sort(a[mid:])
+        merged, count, i, j = [], x + y, 0, 0
+        while i < len(left) and j < len(right):
+            if left[i] <= right[j]:
+                merged.append(left[i])
+                i += 1
+            else:
+                merged.append(right[j])
+                count += len(left) - i
+                j += 1
+        return merged + left[i:] + right[j:], count
+
+    return sort(nums)[1]
+'''
+cpp = '''
+long long sortCount(vector<int>& a, vector<int>& tmp, int lo, int hi) {
+    if (hi - lo <= 1) return 0;
+    int mid = (lo + hi) / 2;
+    long long count = sortCount(a, tmp, lo, mid) + sortCount(a, tmp, mid, hi);
+    int i = lo, j = mid, k = lo;
+    while (i < mid && j < hi) {
+        if (a[i] <= a[j]) tmp[k++] = a[i++];
+        else {
+            count += mid - i;
+            tmp[k++] = a[j++];
+        }
+    }
+    while (i < mid) tmp[k++] = a[i++];
+    while (j < hi) tmp[k++] = a[j++];
+    copy(tmp.begin() + lo, tmp.begin() + hi, a.begin() + lo);
+    return count;
+}
+
+long long countInversions(vector<int>& nums) {
+    vector<int> tmp(nums.size());
+    return sortCount(nums, tmp, 0, nums.size());
+}
+'''
+
+[[exercises.perf]]
+label = "n = 100 000"
+in = "[[rng.randint(-10**9, 10**9) for _ in range(100_000)]]"
+
+[exercises.scale]
+label = "n = len(nums)"
+in = "[[rng.randint(-10**9, 10**9) for _ in range(n)]]"
+
+[[exercises]]
+id = "kth-smallest"
+mode = "normal"
+title = "k-th smallest with a heap"
+tags = ["heaps", "selection"]
+target = 420
+signature = "kth_smallest(nums: list[int], k: int) -> int"
+statement = """
+Return the k-th smallest element of nums (k = 1 is the minimum), in O(n log k):
+keep only k candidates at any time.
+"""
+hint = "A max-heap of the k smallest seen so far: a new element smaller than its top replaces it."
+explanation = """
+Sorting gives the answer in O(n log n) but orders far more than needed. A
+max-heap of size k holds the k smallest elements seen so far, its top being the
+largest of them: a new element smaller than the top replaces it. Each step is
+O(log k), so O(n log k), which is O(n) when k is a constant. Python's heapq is a
+min-heap: store negated values.
+"""
+tests = [
+  { in = [[7, 10, 4, 3, 20, 15], 3], out = 7 },
+  { in = [[1], 1], out = 1 },
+  { in = [[5, 5, 5], 2], out = 5 },
+  { in = [[-3, 2, -1], 1], out = -3 },
+  { in = [[9, 8, 7, 6], 4], out = 9 },
+]
+
+[exercises.solutions]
+python = '''
+import heapq
+
+
+def kth_smallest(nums, k):
+    heap = []  # negated: a max-heap of the k smallest
+    for x in nums:
+        if len(heap) < k:
+            heapq.heappush(heap, -x)
+        elif x < -heap[0]:
+            heapq.heapreplace(heap, -x)
+    return -heap[0]
+'''
+cpp = '''
+int kthSmallest(vector<int>& nums, int k) {
+    priority_queue<int> heap;  // max-heap of the k smallest
+    for (int x : nums) {
+        if ((int)heap.size() < k) heap.push(x);
+        else if (x < heap.top()) {
+            heap.pop();
+            heap.push(x);
+        }
+    }
+    return heap.top();
+}
+'''
+
+[[exercises]]
+id = "min-heap"
+mode = "hard"
+kind = "code"
+title = "A binary min-heap"
+tags = ["heaps", "data-structures"]
+target = 1200
+statement = """
+Implement a binary min-heap of ints stored in an array:
+push(x), pop() (removes and returns the minimum), top(), size(), and a
+constructor from a list that heapifies it in O(n).
+pop() and top() on an empty heap raise IndexError (Python) / std::out_of_range (C++).
+"""
+hint = "Children of i are 2i+1 and 2i+2; sift up after push, sift down after pop; heapify by sifting down from the last parent to 0."
+explanation = """
+The array is a complete binary tree read level by level, so no pointers are
+needed: the parent of i is (i - 1) / 2. push adds at the end and sifts up, pop
+moves the last element to the root and sifts down, both along one path: O(log n).
+
+Building by n pushes costs O(n log n), but sifting down from the last parent to
+the root is O(n): most nodes are near the bottom, where sifting is cheap, and the
+sum of the heights over all nodes is below n.
+"""
+
+[exercises.starter]
+python = '''
+class MinHeap:
+    def __init__(self, items=()):
+        pass
+
+    def push(self, x: int) -> None:
+        pass
+
+    def pop(self) -> int:
+        pass
+
+    def top(self) -> int:
+        pass
+
+    def __len__(self) -> int:
+        pass
+'''
+cpp = '''
+#include <bits/stdc++.h>
+
+class MinHeap {
+public:
+    explicit MinHeap(std::vector<int> items = {}) {}
+    void push(int x) {}
+    int pop() {}
+    int top() const {}
+    std::size_t size() const {}
+};
+'''
+
+[exercises.checks]
+python = '''
+import random
+
+h = MinHeap()
+for x in [5, 3, 8, 1]:
+    h.push(x)
+check("top", h.top(), 1)
+check("size", len(h), 4)
+check("pops in order", [h.pop() for _ in range(4)], [1, 3, 5, 8])
+raises("pop on empty", IndexError, h.pop)
+raises("top on empty", IndexError, h.top)
+data = [random.randint(-1000, 1000) for _ in range(2000)]
+built = MinHeap(data)
+check("heapify then pop", [built.pop() for _ in range(2000)], sorted(data))
+check("duplicates", [MinHeap([2, 2, 1]).pop()], [1])
+'''
+cpp = '''
+MinHeap h;
+for (int x : {5, 3, 8, 1}) h.push(x);
+CHECK_EQ(h.top(), 1);
+CHECK_EQ(h.size(), std::size_t{4});
+std::vector<int> popped;
+for (int i = 0; i < 4; ++i) popped.push_back(h.pop());
+CHECK_EQ(popped, std::vector<int>{1, 3, 5, 8});
+CHECK_THROWS(std::out_of_range, h.pop());
+CHECK_THROWS(std::out_of_range, h.top());
+std::vector<int> data;
+for (int i = 0; i < 2000; ++i) data.push_back((i * 7919) % 2001 - 1000);
+MinHeap built(data);
+std::vector<int> out;
+while (built.size()) out.push_back(built.pop());
+std::ranges::sort(data);
+CHECK_EQ(out, data);
+'''
+
+[exercises.solutions]
+python = '''
+class MinHeap:
+    def __init__(self, items=()):
+        self.a = list(items)
+        for i in reversed(range(len(self.a) // 2)):
+            self._down(i)
+
+    def _up(self, i):
+        a = self.a
+        while i and a[(i - 1) // 2] > a[i]:
+            a[i], a[(i - 1) // 2] = a[(i - 1) // 2], a[i]
+            i = (i - 1) // 2
+
+    def _down(self, i):
+        a, n = self.a, len(self.a)
+        while True:
+            smallest = i
+            for c in (2 * i + 1, 2 * i + 2):
+                if c < n and a[c] < a[smallest]:
+                    smallest = c
+            if smallest == i:
+                return
+            a[i], a[smallest] = a[smallest], a[i]
+            i = smallest
+
+    def push(self, x):
+        self.a.append(x)
+        self._up(len(self.a) - 1)
+
+    def pop(self):
+        if not self.a:
+            raise IndexError("pop from an empty heap")
+        a = self.a
+        a[0], a[-1] = a[-1], a[0]
+        x = a.pop()
+        if a:
+            self._down(0)
+        return x
+
+    def top(self):
+        if not self.a:
+            raise IndexError("top of an empty heap")
+        return self.a[0]
+
+    def __len__(self):
+        return len(self.a)
+'''
+cpp = '''
+#include <bits/stdc++.h>
+
+class MinHeap {
+public:
+    explicit MinHeap(std::vector<int> items = {}) : a_(std::move(items)) {
+        for (std::size_t i = a_.size() / 2; i-- > 0;) down(i);
+    }
+
+    void push(int x) {
+        a_.push_back(x);
+        for (std::size_t i = a_.size() - 1; i && a_[(i - 1) / 2] > a_[i]; i = (i - 1) / 2)
+            std::swap(a_[i], a_[(i - 1) / 2]);
+    }
+
+    int pop() {
+        int x = top();
+        a_.front() = a_.back();
+        a_.pop_back();
+        if (!a_.empty()) down(0);
+        return x;
+    }
+
+    int top() const {
+        if (a_.empty()) throw std::out_of_range("empty heap");
+        return a_.front();
+    }
+
+    std::size_t size() const { return a_.size(); }
+
+private:
+    void down(std::size_t i) {
+        while (true) {
+            std::size_t smallest = i;
+            for (std::size_t c : {2 * i + 1, 2 * i + 2})
+                if (c < a_.size() && a_[c] < a_[smallest]) smallest = c;
+            if (smallest == i) return;
+            std::swap(a_[i], a_[smallest]);
+            i = smallest;
+        }
+    }
+
+    std::vector<int> a_;
+};
+'''
+
+[[exercises]]
+id = "dedupe-sorted"
+mode = "optim"
+title = "Distinct values"
+tags = ["sorting", "hashing"]
+target = 300
+signature = "count_distinct(nums: list[int]) -> int"
+complexity = "O(n log n)"
+statement = """
+count_distinct(nums) is the number of distinct values in nums.
+The code you start with is correct, but too slow for the performance test.
+1. Estimate its complexity, then press c to measure it.
+2. Make it fast enough, and measure again.
+"""
+hint = "After sorting, equal values are next to each other."
+explanation = """
+The starting code compares each element with all the previous ones: O(n²).
+Sorting first puts equal values side by side, so one pass counting the changes
+between neighbours is enough: O(n log n) for the sort, then O(n). A hash set does
+it in O(n) on average; sorting needs no extra memory if done in place.
+"""
+tests = [
+  { in = [[1, 2, 2, 3]], out = 3 },
+  { in = [[]], out = 0 },
+  { in = [[7, 7, 7]], out = 1 },
+  { in = [[-1, 1, -1, 1]], out = 2 },
+  { in = [[5, 4, 3]], out = 3 },
+]
+
+[exercises.starter]
+python = '''
+def count_distinct(nums: list[int]) -> int:
+    count = 0
+    for i, x in enumerate(nums):
+        if x not in nums[:i]:
+            count += 1
+    return count
+'''
+cpp = '''
+#include <bits/stdc++.h>
+using namespace std;
+
+int countDistinct(vector<int>& nums) {
+    int count = 0;
+    for (size_t i = 0; i < nums.size(); ++i)
+        if (find(nums.begin(), nums.begin() + i, nums[i]) == nums.begin() + i) ++count;
+    return count;
+}
+'''
+
+[exercises.solutions]
+python = '''
+def count_distinct(nums):
+    a = sorted(nums)
+    return sum(1 for i, x in enumerate(a) if i == 0 or x != a[i - 1])
+'''
+cpp = '''
+int countDistinct(vector<int>& nums) {
+    sort(nums.begin(), nums.end());
+    return unique(nums.begin(), nums.end()) - nums.begin();
+}
+'''
+
+[[exercises.perf]]
+label = "n = 100 000"
+in = "[[rng.randint(1, 50_000) for _ in range(100_000)]]"
+
+[exercises.scale]
+label = "n = len(nums)"
+in = "[[rng.randint(1, n) for _ in range(n)]]"

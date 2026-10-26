@@ -1,0 +1,74 @@
+title = "Lazy iterator toolkit"
+kind = "code"
+tags = ["python", "generator", "itertools", "iterators"]
+target = 720
+statement = """
+Three generators that must work on any iterable, infinite ones included, and
+consume their input in a single pass:
+- windows(iterable, n): tuples of n consecutive items (sliding by one);
+- chunked(iterable, n): lists of n items, the last one possibly shorter;
+- interleave(*iterables): one item from each in turn, skipping the exhausted
+  ones, until all are exhausted.
+"""
+hint = "collections.deque(maxlen=n); itertools.islice on a single iter() with the walrus operator; a deque of iterators rotated with popleft / append."
+
+[starter]
+python = '''
+def windows(iterable, n):
+    pass
+
+
+def chunked(iterable, n):
+    pass
+
+
+def interleave(*iterables):
+    pass
+'''
+
+[checks]
+python = '''
+from itertools import count, islice
+
+check("windows", list(windows([1, 2, 3, 4], 2)), [(1, 2), (2, 3), (3, 4)])
+check("window larger than the input", list(windows([1, 2], 3)), [])
+check("windows on an infinite iterator", list(islice(windows(count(), 3), 2)), [(0, 1, 2), (1, 2, 3)])
+check("chunked", list(chunked(range(7), 3)), [[0, 1, 2], [3, 4, 5], [6]])
+check("chunked on an infinite iterator", next(chunked(count(), 2)), [0, 1])
+check("chunked empty", list(chunked([], 2)), [])
+check("chunked single pass", list(chunked(iter([1, 2, 3, 4, 5]), 2)), [[1, 2], [3, 4], [5]])
+check("interleave", list(interleave("ab", [1, 2, 3], "x")), ["a", 1, "x", "b", 2, 3])
+check("interleave with an infinite iterator", list(islice(interleave(count(), "ab"), 5)), [0, "a", 1, "b", 2])
+check("interleave nothing", list(interleave()), [])
+'''
+
+[solutions]
+python = '''
+from collections import deque
+from itertools import islice
+
+
+def windows(iterable, n):
+    window = deque(maxlen=n)
+    for item in iterable:
+        window.append(item)
+        if len(window) == n:
+            yield tuple(window)
+
+
+def chunked(iterable, n):
+    it = iter(iterable)  # one iterator, so every chunk resumes where the last stopped
+    while chunk := list(islice(it, n)):
+        yield chunk
+
+
+def interleave(*iterables):
+    active = deque(iter(it) for it in iterables)
+    while active:
+        it = active.popleft()
+        try:
+            yield next(it)
+        except StopIteration:
+            continue
+        active.append(it)
+'''

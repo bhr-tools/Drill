@@ -1,0 +1,74 @@
+title = "Splitting with string_view"
+kind = "code"
+tags = ["cpp", "idiom", "string_view", "parsing"]
+target = 420
+statement = """
+Without copying any characters:
+- split(s, sep): every field between separators, empty ones included
+  ("a,,b," gives "a", "", "b", ""; "" gives one empty field);
+- trim(s): s without leading and trailing spaces, tabs and newlines;
+- tokens(s): the words separated by runs of spaces, no empty tokens.
+The returned views point into the original string.
+"""
+hint = "find / substr / remove_prefix on std::string_view; find_first_not_of and find_last_not_of for trim."
+
+[starter]
+cpp = '''
+#include <bits/stdc++.h>
+
+std::vector<std::string_view> split(std::string_view s, char sep) {
+}
+
+std::string_view trim(std::string_view s) {
+}
+
+std::vector<std::string_view> tokens(std::string_view s) {
+}
+'''
+
+[checks]
+cpp = '''
+using Views = std::vector<std::string_view>;
+CHECK_EQ(split("a,b,c", ','), Views{"a", "b", "c"});
+CHECK_EQ(split("a,,b,", ','), Views{"a", "", "b", ""});
+CHECK_EQ(split("", ','), Views{""});
+std::string owner = "x;y";
+auto parts = split(owner, ';');
+CHECK(parts[0].data() == owner.data());
+CHECK(parts[1].data() == owner.data() + 2);
+CHECK_EQ(trim("  hi there \t\n"), std::string_view("hi there"));
+CHECK_EQ(trim("   "), std::string_view(""));
+CHECK_EQ(trim("x"), std::string_view("x"));
+CHECK_EQ(tokens("  the  quick brown "), Views{"the", "quick", "brown"});
+CHECK(tokens("   ").empty());
+'''
+
+[solutions]
+cpp = '''
+#include <bits/stdc++.h>
+
+std::vector<std::string_view> split(std::string_view s, char sep) {
+    std::vector<std::string_view> parts;
+    while (true) {
+        auto at = s.find(sep);
+        parts.push_back(s.substr(0, at));
+        if (at == std::string_view::npos) return parts;
+        s.remove_prefix(at + 1);
+    }
+}
+
+std::string_view trim(std::string_view s) {
+    constexpr std::string_view space = " \t\n\r";
+    auto first = s.find_first_not_of(space);
+    if (first == std::string_view::npos) return {};
+    auto last = s.find_last_not_of(space);
+    return s.substr(first, last - first + 1);
+}
+
+std::vector<std::string_view> tokens(std::string_view s) {
+    std::vector<std::string_view> out;
+    for (auto part : split(s, ' '))
+        if (!part.empty()) out.push_back(part);
+    return out;
+}
+'''

@@ -1,0 +1,163 @@
+title = "A development shell in a flake"
+kind = "code"
+file = "flake.nix"
+tags = ["nix", "flakes", "devshell", "mkshell"]
+target = 300
+statement = """
+Write flake.nix so that `nix develop` gives a shell for a Python data project,
+on x86_64-linux and aarch64-linux:
+- python3 with the requests package (python3.withPackages);
+- jq;
+- the environment variable DATABASE_URL set to "postgresql://localhost/drill".
+The flake's only input is nixpkgs. Try it: `nix develop` in this folder.
+"""
+hint = "devShells = nixpkgs.lib.genAttrs [ … ] (system: let pkgs = nixpkgs.legacyPackages.${system}; in { default = pkgs.mkShell { packages = [ … ]; DATABASE_URL = …; }; });"
+explanation = """
+mkShell is a derivation that is never built: `nix develop` builds its inputs and
+starts a shell with the environment of its build. `packages` (an alias of
+nativeBuildInputs) puts programs on PATH; any other attribute becomes an
+environment variable, like DATABASE_URL here (or put them in `env`).
+
+python3.withPackages builds one Python environment that sees the listed
+packages, the Nix way: installing requests globally would not be reproducible.
+genAttrs over the systems gives one shell per platform: flakes have no notion
+of the current system, which keeps their outputs pure.
+"""
+
+[starter]
+nix = '''
+{
+  description = "A development shell";
+
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+
+  outputs = { self, nixpkgs }: {
+  };
+}
+'''
+
+[setup]
+nix = '''
+flake = loadFlake dir;
+shell = flake.devShells.${system}.default;
+mentions = name: drv:
+  let r = builtins.tryEval (lib.hasInfix "-${name}-" (builtins.unsafeDiscardStringContext (builtins.toJSON drv.drvAttrs)));
+  in r.success && r.value;
+inputsOf = drv: drv.nativeBuildInputs ++ drv.buildInputs;
+'''
+
+[checks]
+nix = '''
+(check "devShells for both systems" (builtins.attrNames flake.devShells) [ "aarch64-linux" "x86_64-linux" ])
+(check "the aarch64 shell is built for aarch64" flake.devShells.aarch64-linux.default.system "aarch64-linux")
+(check "jq is in the shell" (builtins.elem "jq" (packageNames shell)) true)
+(check "python3 is in the shell" (builtins.elem "python3" (packageNames shell)) true)
+(check "python3 has requests" (builtins.any (p: lib.getName p == "python3" && mentions "requests" p) (inputsOf shell)) true)
+(check "DATABASE_URL" (shell.DATABASE_URL or null) "postgresql://localhost/drill")
+'''
+
+[solutions]
+nix = '''
+{
+  description = "A development shell";
+
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+
+  outputs = { self, nixpkgs }: {
+    devShells = nixpkgs.lib.genAttrs [ "x86_64-linux" "aarch64-linux" ] (system:
+      let pkgs = nixpkgs.legacyPackages.${system}; in {
+        default = pkgs.mkShell {
+          packages = [ (pkgs.python3.withPackages (ps: [ ps.requests ])) pkgs.jq ];
+          DATABASE_URL = "postgresql://localhost/drill";
+        };
+      });
+  };
+}
+'''
+
+[[variants]]
+statement = """
+Write flake.nix so that `nix develop` gives a shell for a JavaScript project,
+on x86_64-linux and aarch64-linux:
+- nodejs and pnpm;
+- a shellHook that puts the project's local binaries first in PATH:
+  export PATH="$PWD/node_modules/.bin:$PATH";
+- NODE_ENV set to "development".
+The flake's only input is nixpkgs. Try it: `nix develop` in this folder.
+"""
+hint = "mkShell { packages = [ … ]; shellHook = '' … ''; NODE_ENV = …; }, inside genAttrs over the systems."
+[variants.checks]
+nix = '''
+(check "devShells for both systems" (builtins.attrNames flake.devShells) [ "aarch64-linux" "x86_64-linux" ])
+(check "the aarch64 shell is built for aarch64" flake.devShells.aarch64-linux.default.system "aarch64-linux")
+(check "nodejs is in the shell" (builtins.elem "nodejs" (packageNames shell)) true)
+(check "pnpm is in the shell" (builtins.elem "pnpm" (packageNames shell)) true)
+(check "the shellHook adds node_modules/.bin to PATH" (lib.hasInfix "node_modules/.bin" (shell.shellHook or "")) true)
+(check "NODE_ENV" (shell.NODE_ENV or null) "development")
+'''
+[variants.solutions]
+nix = '''
+{
+  description = "A development shell";
+
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+
+  outputs = { self, nixpkgs }: {
+    devShells = nixpkgs.lib.genAttrs [ "x86_64-linux" "aarch64-linux" ] (system:
+      let pkgs = nixpkgs.legacyPackages.${system}; in {
+        default = pkgs.mkShell {
+          packages = [ pkgs.nodejs pkgs.pnpm ];
+          shellHook = ''
+            export PATH="$PWD/node_modules/.bin:$PATH"
+          '';
+          NODE_ENV = "development";
+        };
+      });
+  };
+}
+'''
+
+[[variants]]
+statement = """
+Write flake.nix so that `nix develop` gives a shell for a C project, on
+x86_64-linux and aarch64-linux:
+- the build tools cmake, pkg-config and gdb, on PATH (packages / nativeBuildInputs);
+- the openssl library to link against (buildInputs: a library, not a tool);
+- the compiler hardening flags disabled, for debugging: hardeningDisable = [ "all" ].
+The flake's only input is nixpkgs. Try it: `nix develop` in this folder.
+"""
+hint = "Tools in nativeBuildInputs (or packages), libraries in buildInputs: it matters when cross-compiling."
+explanation = """
+nativeBuildInputs run on the build machine (compilers, cmake, pkg-config),
+buildInputs are linked into the result and built for the target machine. The
+distinction only shows when cross-compiling, but nixpkgs relies on it
+everywhere, and pkg-config finds openssl precisely because it is a buildInput.
+"""
+[variants.checks]
+nix = '''
+(check "devShells for both systems" (builtins.attrNames flake.devShells) [ "aarch64-linux" "x86_64-linux" ])
+(check "cmake is a native input" (builtins.elem "cmake" (map lib.getName shell.nativeBuildInputs)) true)
+(check "pkg-config is a native input" (builtins.elem "pkg-config-wrapper" (map lib.getName shell.nativeBuildInputs)) true)
+(check "gdb is a native input" (builtins.elem "gdb" (map lib.getName shell.nativeBuildInputs)) true)
+(check "openssl is a build input (a library)" (map lib.getName shell.buildInputs) [ "openssl" ])
+(check "hardening disabled" (shell.hardeningDisable or [ ]) [ "all" ])
+'''
+[variants.solutions]
+nix = '''
+{
+  description = "A development shell";
+
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+
+  outputs = { self, nixpkgs }: {
+    devShells = nixpkgs.lib.genAttrs [ "x86_64-linux" "aarch64-linux" ] (system:
+      let pkgs = nixpkgs.legacyPackages.${system}; in {
+        default = pkgs.mkShell {
+          nativeBuildInputs = [ pkgs.cmake pkgs.pkg-config pkgs.gdb ];
+          buildInputs = [ pkgs.openssl ];
+          hardeningDisable = [ "all" ];
+        };
+      });
+  };
+}
+'''

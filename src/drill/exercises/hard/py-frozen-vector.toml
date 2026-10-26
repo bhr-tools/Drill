@@ -1,0 +1,103 @@
+title = "An immutable vector type"
+kind = "code"
+tags = ["python", "dataclass", "dunder", "operators"]
+target = 720
+statement = """
+Vec(x, y) is an immutable 2D vector built with @dataclass(frozen=True):
+- v + w, v - w; v * k and k * v for a number k; anything else raises TypeError;
+- abs(v) is its length; bool(v) is False only for the zero vector;
+- unpacking works: x, y = v;
+- hashable and immutable (assigning v.x raises dataclasses.FrozenInstanceError);
+- the dataclass repr, Vec(x=1, y=2), and dataclass equality;
+- v < w compares lengths, and the other orderings follow (sorted works);
+- Vec.from_polar(r, theta) is an alternative constructor.
+"""
+hint = "Return NotImplemented for unsupported operands; __rmul__ = __mul__; __iter__ as a generator; functools.total_ordering from __lt__; @classmethod."
+
+[starter]
+python = '''
+import math
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class Vec:
+    x: float
+    y: float
+'''
+
+[checks]
+python = '''
+import dataclasses
+import math
+
+a, b = Vec(1, 2), Vec(3, 4)
+check("add", a + b, Vec(4, 6))
+check("subtract", b - a, Vec(2, 2))
+check("scale on the right", a * 3, Vec(3, 6))
+check("scale on the left", 3 * a, Vec(3, 6))
+raises("adding a number", TypeError, lambda: a + 1)
+check("length", abs(b), 5.0)
+check("iterable", tuple(b), (3, 4))
+x, y = a
+check("unpacking", (x, y), (1, 2))
+check("zero is falsy", bool(Vec(0, 0)), False)
+check("non-zero is truthy", bool(a), True)
+check("hashable", len({Vec(1, 2), Vec(1, 2), Vec(2, 1)}), 2)
+raises("immutable", dataclasses.FrozenInstanceError, setattr, a, "x", 5)
+check("repr", repr(a), "Vec(x=1, y=2)")
+check("sorted by length", sorted([Vec(3, 4), Vec(1, 0), Vec(0, 2)]), [Vec(1, 0), Vec(0, 2), Vec(3, 4)])
+check("greater or equal", Vec(3, 4) >= Vec(0, 5), True)
+check("from_polar", Vec.from_polar(2, math.pi / 2).y, 2.0)
+check("not equal to a tuple", Vec(1, 2) == (1, 2), False)
+'''
+
+[solutions]
+python = '''
+import math
+from dataclasses import dataclass
+from functools import total_ordering
+
+
+@total_ordering
+@dataclass(frozen=True)
+class Vec:
+    x: float
+    y: float
+
+    @classmethod
+    def from_polar(cls, r: float, theta: float) -> "Vec":
+        return cls(r * math.cos(theta), r * math.sin(theta))
+
+    def __add__(self, other):
+        if not isinstance(other, Vec):
+            return NotImplemented
+        return Vec(self.x + other.x, self.y + other.y)
+
+    def __sub__(self, other):
+        if not isinstance(other, Vec):
+            return NotImplemented
+        return Vec(self.x - other.x, self.y - other.y)
+
+    def __mul__(self, k):
+        if not isinstance(k, (int, float)):
+            return NotImplemented
+        return Vec(self.x * k, self.y * k)
+
+    __rmul__ = __mul__
+
+    def __abs__(self) -> float:
+        return math.hypot(self.x, self.y)
+
+    def __bool__(self) -> bool:
+        return bool(self.x or self.y)
+
+    def __iter__(self):
+        yield self.x
+        yield self.y
+
+    def __lt__(self, other):
+        if not isinstance(other, Vec):
+            return NotImplemented
+        return abs(self) < abs(other)
+'''

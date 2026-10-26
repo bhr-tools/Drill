@@ -1,0 +1,52 @@
+title = "First unique character"
+tags = ["hashmap", "string"]
+target = 60
+signature = "first_unique_char(s: str) -> int"
+statement = """
+Return the index of the first character of s that appears exactly once, or -1.
+"""
+hint = "Count every character first, then scan again."
+complexity = "O(n)"
+tests = [
+  { in = ["leetcode"], out = 0 },
+  { in = ["loveleetcode"], out = 2 },
+  { in = ["aabb"], out = -1 },
+  { in = ["z"], out = 0 },
+  { in = [""], out = -1 },
+  { in = ["abcabd"], out = 2 },
+]
+
+[solutions]
+python = '''
+from collections import Counter
+
+def first_unique_char(s: str) -> int:
+    counts = Counter(s)
+    return next((i for i, c in enumerate(s) if counts[c] == 1), -1)
+'''
+cpp = '''
+int firstUniqueChar(const string& s) {
+    array<int, 256> count{};
+    for (unsigned char c : s) ++count[c];
+    for (int i = 0; i < (int)s.size(); ++i)
+        if (count[(unsigned char)s[i]] == 1) return i;
+    return -1;
+}
+'''
+java = '''
+public int firstUniqueChar(String s) {
+    Map<Character, Integer> counts = new HashMap<>();
+    for (char c : s.toCharArray()) counts.merge(c, 1, Integer::sum);
+    for (int i = 0; i < s.length(); i++)
+        if (counts.get(s.charAt(i)) == 1) return i;
+    return -1;
+}
+'''
+
+[[perf]]
+label = "n = 200 000, the unique character last"
+in = "[''.join(rng.choice('abcdefghijklmnopqrstuvwxy') for _ in range(200_000)) + 'z']"
+
+[scale]
+label = "n = len(s)"
+in = "[''.join(rng.choice('abcdefghijklmnopqrstuvwxy') for _ in range(n)) + 'z']"

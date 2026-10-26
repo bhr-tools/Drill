@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "drill"
+version = "0.1.0"
+description = "Rapid-fire coding exercises, solved in your own editor"
+requires-python = ">=3.11"
+
+[project.scripts]
+drill = "drill.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+drill = ["exercises/*/*.toml"]
+
+[tool.ruff]
+line-length = 100

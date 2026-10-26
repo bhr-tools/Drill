@@ -1,0 +1,91 @@
+title = "Comparable versions"
+kind = "code"
+tags = ["cpp", "idiom", "spaceship", "operators", "parsing"]
+target = 480
+statement = """
+struct Version { int major, minor, patch; } must:
+- support all six comparisons, in version order, with a single defaulted
+  operator (no hand-written comparisons);
+- print as "1.2.3" with operator<<.
+parse_version(text) returns the Version written as exactly three non-negative
+integers separated by dots, or std::nullopt.
+"""
+hint = "auto operator<=>(const Version&) const = default; also gives ==. std::from_chars for the numbers."
+
+[starter]
+cpp = '''
+#include <bits/stdc++.h>
+
+struct Version {
+    int major = 0;
+    int minor = 0;
+    int patch = 0;
+};
+
+std::optional<Version> parse_version(std::string_view text) {
+}
+
+std::ostream& operator<<(std::ostream& os, const Version& v) {
+}
+'''
+
+[checks]
+cpp = '''
+Version a{1, 2, 3}, b{1, 10, 0};
+CHECK(a < b);
+CHECK(b > a);
+CHECK(a <= a);
+CHECK(a == Version{1, 2, 3});
+CHECK(a != b);
+std::vector<Version> versions{{2, 0, 0}, {1, 10, 0}, {1, 2, 3}, {1, 2, 10}};
+std::ranges::sort(versions);
+CHECK_EQ(versions, std::vector<Version>{{1, 2, 3}, {1, 2, 10}, {1, 10, 0}, {2, 0, 0}});
+CHECK_EQ(parse_version("1.2.3"), std::optional<Version>(Version{1, 2, 3}));
+CHECK_EQ(parse_version("10.0.12"), std::optional<Version>(Version{10, 0, 12}));
+CHECK(!parse_version("1.2"));
+CHECK(!parse_version("1.2.3.4"));
+CHECK(!parse_version("1.x.3"));
+CHECK(!parse_version("-1.2.3"));
+CHECK(!parse_version("1..3"));
+std::ostringstream out;
+out << Version{4, 5, 6};
+CHECK_EQ(out.str(), std::string("4.5.6"));
+'''
+
+[solutions]
+cpp = '''
+#include <bits/stdc++.h>
+
+struct Version {
+    int major = 0;
+    int minor = 0;
+    int patch = 0;
+
+    // Member-wise in declaration order: exactly version order. Also defaults ==.
+    auto operator<=>(const Version&) const = default;
+};
+
+std::optional<Version> parse_version(std::string_view text) {
+    Version v;
+    int* fields[] = {&v.major, &v.minor, &v.patch};
+    const char* p = text.data();
+    const char* end = text.data() + text.size();
+    for (int i = 0; i < 3; ++i) {
+        if (i > 0) {
+            if (p == end || *p != '.') return std::nullopt;
+            ++p;
+        }
+        // from_chars accepts a minus sign: require a digit first
+        if (p == end || !std::isdigit(static_cast<unsigned char>(*p))) return std::nullopt;
+        auto [next, error] = std::from_chars(p, end, *fields[i]);
+        if (error != std::errc{}) return std::nullopt;
+        p = next;
+    }
+    if (p != end) return std::nullopt;
+    return v;
+}
+
+std::ostream& operator<<(std::ostream& os, const Version& v) {
+    return os << v.major << '.' << v.minor << '.' << v.patch;
+}
+'''

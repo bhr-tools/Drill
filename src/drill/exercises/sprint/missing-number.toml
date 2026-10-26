@@ -1,0 +1,47 @@
+title = "Missing number"
+tags = ["math", "bits"]
+target = 60
+signature = "missing_number(nums: list[int]) -> int"
+statement = """
+nums holds n distinct numbers taken from 0..n. Return the one that is missing,
+in O(n) time and O(1) extra space.
+"""
+hint = "Expected sum n(n+1)/2 minus the actual sum — or XOR indices and values."
+complexity = "O(n)"
+tests = [
+  { in = [[3, 0, 1]], out = 2 },
+  { in = [[0, 1]], out = 2 },
+  { in = [[9, 6, 4, 2, 3, 5, 7, 0, 1]], out = 8 },
+  { in = [[0]], out = 1 },
+  { in = [[1]], out = 0 },
+  { in = [[]], out = 0 },
+]
+
+[solutions]
+python = '''
+def missing_number(nums: list[int]) -> int:
+    n = len(nums)
+    return n * (n + 1) // 2 - sum(nums)
+'''
+cpp = '''
+int missingNumber(vector<int>& nums) {
+    int x = nums.size();
+    for (int i = 0; i < (int)nums.size(); ++i) x ^= i ^ nums[i];
+    return x;
+}
+'''
+java = '''
+public int missingNumber(int[] nums) {
+    int n = nums.length;
+    return n * (n + 1) / 2 - Arrays.stream(nums).sum();
+}
+'''
+
+[scale]
+label = "n = len(nums)"
+code = '''
+nums = list(range(n + 1))
+nums.pop(rng.randrange(n + 1))
+rng.shuffle(nums)
+args = [nums]
+'''

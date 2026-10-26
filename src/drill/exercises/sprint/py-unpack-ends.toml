@@ -1,0 +1,31 @@
+title = "Star unpacking"
+kind = "code"
+tags = ["python", "idiom", "unpacking"]
+target = 60
+statement = """
+ends(iterable) returns the tuple (first, last, middle) where middle is the list
+of the items in between. The iterable has at least two items and may be any
+iterable: list, string, generator…
+"""
+hint = "first, *middle, last = iterable"
+
+[starter]
+python = '''
+def ends(iterable):
+    pass
+'''
+
+[checks]
+python = '''
+check("list", ends([1, 2, 3, 4]), (1, 4, [2, 3]))
+check("two items", ends("ab"), ("a", "b", []))
+check("generator", ends(x * x for x in range(5)), (0, 16, [1, 4, 9]))
+check("returns a tuple", type(ends([1, 2])), tuple)
+'''
+
+[solutions]
+python = '''
+def ends(iterable):
+    first, *middle, last = iterable
+    return first, last, middle
+'''

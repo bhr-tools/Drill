@@ -1,0 +1,55 @@
+title = "Reverse words"
+tags = ["string"]
+target = 60
+signature = "reverse_words(s: str) -> str"
+statement = """
+Return the words of s in reverse order.
+Words are separated by one or more spaces. The result separates them with a
+single space and has no leading or trailing spaces.
+"""
+hint = "Split on whitespace, reverse, join."
+complexity = "O(n)"
+tests = [
+  { in = ["the sky is blue"], out = "blue is sky the" },
+  { in = ["  hello world  "], out = "world hello" },
+  { in = ["a good   example"], out = "example good a" },
+  { in = ["single"], out = "single" },
+  { in = ["   "], out = "" },
+]
+
+[solutions]
+ocaml = '''
+let reverse_words s =
+  String.split_on_char ' ' s
+  |> List.filter (fun w -> w <> "")
+  |> List.rev
+  |> String.concat " "
+'''
+python = '''
+def reverse_words(s: str) -> str:
+    return " ".join(reversed(s.split()))
+'''
+cpp = '''
+string reverseWords(const string& s) {
+    istringstream in(s);
+    vector<string> words;
+    for (string w; in >> w;) words.push_back(w);
+    string out;
+    for (auto it = words.rbegin(); it != words.rend(); ++it) {
+        if (!out.empty()) out += ' ';
+        out += *it;
+    }
+    return out;
+}
+'''
+java = '''
+public String reverseWords(String s) {
+    List<String> words = new ArrayList<>(Arrays.asList(s.trim().split("\\s+")));
+    Collections.reverse(words);
+    return String.join(" ", words);
+}
+'''
+
+[scale]
+label = "n = number of words"
+in = "[' '.join(rng.choices(['a', 'bc', 'def', 'ghij', 'klmno'], k=n))]"

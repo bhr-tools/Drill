@@ -1,0 +1,96 @@
+title = "A correct value class"
+kind = "code"
+tags = ["java", "equals-hashcode", "comparable", "bigdecimal", "immutability"]
+target = 900
+statement = """
+final class Money implements Comparable<Money>, an immutable amount in a currency:
+- Money.of("12.5", "EUR"): amounts are rounded to cents, half to even;
+- plus(other) (IllegalArgumentException across currencies) and times(int)
+  return new values;
+- equals and hashCode agree, whatever the scale of the input ("12.5" equals
+  "12.50"), so Money works in HashSet; compareTo orders by currency then amount,
+  consistently with equals, so it also works in TreeSet;
+- toString() is "12.50 EUR".
+"""
+hint = "Store a BigDecimal with setScale(2, RoundingMode.HALF_EVEN): BigDecimal.equals compares the scale too. toPlainString(); Objects.hash; pattern-matching instanceof in equals."
+
+[starter]
+java = '''
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.*;
+
+final class Money implements Comparable<Money> {
+}
+'''
+
+[checks]
+java = '''
+Money a = Money.of("12.5", "EUR"), b = Money.of("12.50", "EUR");
+check("equal whatever the scale", a, b);
+check("same hash", a.hashCode(), b.hashCode());
+check("in a HashSet", new HashSet<>(List.of(a, b)).size(), 1);
+check("in a TreeSet", new TreeSet<>(List.of(a, b)).size(), 1);
+check("toString", a.toString(), "12.50 EUR");
+check("plus", Money.of("0.10", "EUR").plus(Money.of("0.20", "EUR")), Money.of("0.30", "EUR"));
+check("times", Money.of("1.25", "USD").times(3).toString(), "3.75 USD");
+check("rounds half to even", Money.of("0.125", "EUR").toString(), "0.12 EUR");
+checkThrows("different currencies", IllegalArgumentException.class, () -> a.plus(Money.of("1", "USD")));
+List<Money> sorted = new ArrayList<>(List.of(Money.of("5", "USD"), Money.of("20", "EUR"), Money.of("3", "EUR")));
+Collections.sort(sorted);
+check("sorted by currency then amount", sorted.toString(), "[3.00 EUR, 20.00 EUR, 5.00 USD]");
+check("not equal to other types", a.equals("12.50 EUR"), false);
+check("immutable", a.toString(), "12.50 EUR");
+'''
+
+[solutions]
+java = '''
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.*;
+
+final class Money implements Comparable<Money> {
+    private final BigDecimal amount;  // always scale 2, so equals and hashCode agree
+    private final String currency;
+
+    private Money(BigDecimal amount, String currency) {
+        this.amount = amount.setScale(2, RoundingMode.HALF_EVEN);
+        this.currency = currency;
+    }
+
+    static Money of(String amount, String currency) {
+        return new Money(new BigDecimal(amount), currency);
+    }
+
+    Money plus(Money other) {
+        if (!currency.equals(other.currency))
+            throw new IllegalArgumentException(currency + " + " + other.currency);
+        return new Money(amount.add(other.amount), currency);
+    }
+
+    Money times(int factor) {
+        return new Money(amount.multiply(BigDecimal.valueOf(factor)), currency);
+    }
+
+    @Override
+    public int compareTo(Money other) {
+        int byCurrency = currency.compareTo(other.currency);
+        return byCurrency != 0 ? byCurrency : amount.compareTo(other.amount);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        return o instanceof Money m && amount.equals(m.amount) && currency.equals(m.currency);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(amount, currency);
+    }
+
+    @Override
+    public String toString() {
+        return amount.toPlainString() + " " + currency;
+    }
+}
+'''

@@ -1,0 +1,151 @@
+title = "An interpreter on a variant type"
+kind = "code"
+tags = ["ocaml", "idiom", "variants", "pattern-matching", "recursion"]
+target = 420
+statement = """
+type expr = Num of int | Var of string | Add of expr * expr | Mul of expr * expr | Neg of expr
+
+- eval env e: the value of e, where env is an association list of variables.
+  An unbound variable raises Not_found (List.assoc does).
+- simplify e: bottom-up, rewrite 0 + e and e + 0 to e, 1 * e and e * 1 to e,
+  0 * e and e * 0 to Num 0, and Neg (Neg e) to e. Constant subexpressions are not folded.
+- to_string e: fully parenthesised, "(x + (2 * y))", with "-" for Neg: "-(x)".
+"""
+hint = "Simplify the children first, then match on the rebuilt node: | Add (Num 0, e) | Add (e, Num 0) -> e"
+explanation = """
+A variant type lists every shape a value can take, and a match must handle each
+of them: the compiler warns about a forgotten case (warning 8), which is what
+makes OCaml so pleasant for interpreters and compilers.
+
+simplify is bottom-up: the children are simplified first, so that Add (Num 0,
+Mul (Num 1, x)) becomes Add (Num 0, x), then x. Matching on the rebuilt node
+with or-patterns (| Add (Num 0, e) | Add (e, Num 0) -> e) keeps every rule on
+one line. The order of the cases matters: the first matching case wins.
+"""
+
+[starter]
+ocaml = '''
+type expr = Num of int | Var of string | Add of expr * expr | Mul of expr * expr | Neg of expr
+
+let rec eval (env : (string * int) list) (e : expr) : int = failwith "todo"
+
+let rec simplify (e : expr) : expr = failwith "todo"
+
+let rec to_string (e : expr) : string = failwith "todo"
+'''
+
+[checks]
+ocaml = '''
+let e = Add (Var "x", Mul (Num 2, Var "y")) in
+check_eq ~show:Show.int "eval" (eval [ ("x", 1); ("y", 5) ] e) 11;
+check_eq ~show:Show.int "eval neg" (eval [] (Neg (Add (Num 2, Num 3)))) (-5);
+check_raises "unbound variable" (fun () -> eval [] (Var "z"));
+check_eq ~show:to_string "0 + e" (simplify (Add (Num 0, Var "x"))) (Var "x");
+check_eq ~show:to_string "e * 1" (simplify (Mul (Var "x", Num 1))) (Var "x");
+check_eq ~show:to_string "e * 0" (simplify (Mul (Var "x", Num 0))) (Num 0);
+check_eq ~show:to_string "nested" (simplify (Add (Num 0, Mul (Num 1, Neg (Neg (Var "a")))))) (Var "a");
+check_eq ~show:to_string "no folding" (simplify (Add (Num 1, Num 2))) (Add (Num 1, Num 2));
+check_eq ~show:Show.string "to_string" (to_string e) "(x + (2 * y))";
+check_eq ~show:Show.string "to_string neg" (to_string (Neg (Var "x"))) "-(x)";
+'''
+
+[solutions]
+ocaml = '''
+type expr = Num of int | Var of string | Add of expr * expr | Mul of expr * expr | Neg of expr
+
+let rec eval env = function
+  | Num n -> n
+  | Var x -> List.assoc x env
+  | Add (a, b) -> eval env a + eval env b
+  | Mul (a, b) -> eval env a * eval env b
+  | Neg e -> - eval env e
+
+let rec simplify e =
+  match e with
+  | Num _ | Var _ -> e
+  | Add (a, b) -> (
+      match (simplify a, simplify b) with
+      | Num 0, e | e, Num 0 -> e
+      | a, b -> Add (a, b))
+  | Mul (a, b) -> (
+      match (simplify a, simplify b) with
+      | Num 0, _ | _, Num 0 -> Num 0
+      | Num 1, e | e, Num 1 -> e
+      | a, b -> Mul (a, b))
+  | Neg e -> ( match simplify e with Neg inner -> inner | e -> Neg e)
+
+let rec to_string = function
+  | Num n -> string_of_int n
+  | Var x -> x
+  | Add (a, b) -> "(" ^ to_string a ^ " + " ^ to_string b ^ ")"
+  | Mul (a, b) -> "(" ^ to_string a ^ " * " ^ to_string b ^ ")"
+  | Neg e -> "-(" ^ to_string e ^ ")"
+'''
+
+[[variants]]
+title = "Boolean formulas on a variant type"
+statement = """
+type formula = Const of bool | Var of string | Not of formula | And of formula * formula | Or of formula * formula
+
+- eval env f: the truth value of f, env an association list (List.assoc).
+- vars f: the variables of f, sorted, without duplicates (List.sort_uniq compare).
+- nnf f: the negation normal form: Not only in front of a Var, using De Morgan
+  (Not (And (a, b)) is Or (Not a, Not b)), Not (Not f) = f, Not (Const b) = Const (not b).
+"""
+hint = "nnf needs two cases on Not: match the inner formula of a Not."
+[variants.starter]
+ocaml = '''
+type formula = Const of bool | Var of string | Not of formula | And of formula * formula | Or of formula * formula
+
+let rec eval (env : (string * bool) list) (f : formula) : bool = failwith "todo"
+
+let vars (f : formula) : string list = failwith "todo"
+
+let rec nnf (f : formula) : formula = failwith "todo"
+'''
+[variants.checks]
+ocaml = '''
+let f = And (Var "a", Or (Not (Var "b"), Var "a")) in
+check_eq ~show:Show.bool "eval" (eval [ ("a", true); ("b", true) ] f) true;
+check_eq ~show:Show.bool "eval false" (eval [ ("a", false); ("b", false) ] f) false;
+check_raises "unbound" (fun () -> eval [] (Var "z"));
+check_eq ~show:Show.(list string) "vars" (vars (Or (Var "b", And (Var "a", Var "b")))) [ "a"; "b" ];
+check_eq ~show:Show.(list string) "no vars" (vars (Const true)) [];
+check "De Morgan and" (nnf (Not (And (Var "a", Var "b"))) = Or (Not (Var "a"), Not (Var "b")));
+check "De Morgan or" (nnf (Not (Or (Var "a", Not (Var "b"))) ) = And (Not (Var "a"), Var "b"));
+check "double negation" (nnf (Not (Not (Var "x"))) = Var "x");
+check "constants" (nnf (Not (Const true)) = Const false);
+check "deep" (nnf (And (Var "p", Not (Not (Not (Var "q"))))) = And (Var "p", Not (Var "q")));
+'''
+[variants.solutions]
+ocaml = '''
+type formula = Const of bool | Var of string | Not of formula | And of formula * formula | Or of formula * formula
+
+let rec eval env = function
+  | Const b -> b
+  | Var x -> List.assoc x env
+  | Not f -> not (eval env f)
+  | And (a, b) -> eval env a && eval env b
+  | Or (a, b) -> eval env a || eval env b
+
+let vars f =
+  let rec go acc = function
+    | Const _ -> acc
+    | Var x -> x :: acc
+    | Not f -> go acc f
+    | And (a, b) | Or (a, b) -> go (go acc a) b
+  in
+  List.sort_uniq compare (go [] f)
+
+let rec nnf = function
+  | (Const _ | Var _) as f -> f
+  | And (a, b) -> And (nnf a, nnf b)
+  | Or (a, b) -> Or (nnf a, nnf b)
+  | Not f -> (
+      match f with
+      | Const b -> Const (not b)
+      | Var _ -> Not f
+      | Not g -> nnf g
+      | And (a, b) -> Or (nnf (Not a), nnf (Not b))
+      | Or (a, b) -> And (nnf (Not a), nnf (Not b)))
+'''

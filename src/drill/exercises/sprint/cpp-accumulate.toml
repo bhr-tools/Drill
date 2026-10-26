@@ -1,0 +1,57 @@
+title = "Accumulate without overflow"
+kind = "code"
+tags = ["cpp", "idiom", "stl", "numeric"]
+target = 90
+statement = """
+product(v): the product of all elements as a long long (1 when empty).
+mean(v): the average as a double (0 when empty).
+join(parts, sep): the parts separated by sep.
+Use std::accumulate where it fits, and mind the type of its initial value.
+"""
+hint = "std::accumulate's result has the type of its init argument: 1LL, 0.0…"
+
+[starter]
+cpp = '''
+#include <bits/stdc++.h>
+
+long long product(const std::vector<int>& v) {
+}
+
+double mean(const std::vector<int>& v) {
+}
+
+std::string join(const std::vector<std::string>& parts, const std::string& sep) {
+}
+'''
+
+[checks]
+cpp = '''
+CHECK_EQ(product({1, 2, 3, 4}), 24LL);
+CHECK_EQ(product({100000, 100000, 3}), 30000000000LL);
+CHECK_EQ(product({}), 1LL);
+CHECK_EQ(mean({1, 2}), 1.5);
+CHECK_EQ(mean({}), 0.0);
+CHECK_EQ(join({"a", "b", "c"}, ", "), std::string("a, b, c"));
+CHECK_EQ(join({}, "-"), std::string(""));
+CHECK_EQ(join({"solo"}, "-"), std::string("solo"));
+'''
+
+[solutions]
+cpp = '''
+#include <bits/stdc++.h>
+
+long long product(const std::vector<int>& v) {
+    // The init value sets the accumulator type: a plain 1 would overflow as int
+    return std::accumulate(v.begin(), v.end(), 1LL, std::multiplies<>{});
+}
+
+double mean(const std::vector<int>& v) {
+    return v.empty() ? 0.0 : std::accumulate(v.begin(), v.end(), 0.0) / v.size();
+}
+
+std::string join(const std::vector<std::string>& parts, const std::string& sep) {
+    std::string out;
+    for (std::size_t i = 0; i < parts.size(); ++i) out += (i ? sep : "") + parts[i];
+    return out;
+}
+'''

@@ -1,0 +1,122 @@
+title = "Course schedule"
+tags = ["graph", "topological-sort"]
+target = 480
+signature = "can_finish(n: int, prerequisites: list[list[int]]) -> bool"
+statement = """
+There are n courses numbered 0..n-1. A pair [a, b] means course b must be
+taken before course a. Can every course be taken?
+"""
+hint = "It works iff the graph has no cycle: Kahn's algorithm (in-degrees + queue) and count the courses taken."
+complexity = "O(n)"
+tests = [
+  { in = [2, [[1, 0]]], out = true },
+  { in = [2, [[1, 0], [0, 1]]], out = false },
+  { in = [1, []], out = true },
+  { in = [3, [[1, 0], [2, 1]]], out = true },
+  { in = [3, [[0, 1], [1, 2], [2, 0]]], out = false },
+  { in = [4, [[1, 0], [2, 0], [3, 1], [3, 2]]], out = true },
+  { in = [5, [[1, 0], [2, 1], [3, 2], [1, 3]]], out = false },
+  { in = [2, [[0, 0]]], out = false },
+]
+
+[solutions]
+python = '''
+from collections import deque
+
+def can_finish(n: int, prerequisites: list[list[int]]) -> bool:
+    unlocks = [[] for _ in range(n)]
+    indegree = [0] * n
+    for course, before in prerequisites:
+        unlocks[before].append(course)
+        indegree[course] += 1
+    queue = deque(c for c in range(n) if indegree[c] == 0)
+    taken = 0
+    while queue:
+        course = queue.popleft()
+        taken += 1
+        for nxt in unlocks[course]:
+            indegree[nxt] -= 1
+            if indegree[nxt] == 0:
+                queue.append(nxt)
+    return taken == n
+'''
+cpp = '''
+bool canFinish(int n, vector<vector<int>>& prerequisites) {
+    vector<vector<int>> unlocks(n);
+    vector<int> indegree(n);
+    for (auto& p : prerequisites) {
+        unlocks[p[1]].push_back(p[0]);
+        ++indegree[p[0]];
+    }
+    queue<int> ready;
+    for (int c = 0; c < n; ++c)
+        if (indegree[c] == 0) ready.push(c);
+    int taken = 0;
+    while (!ready.empty()) {
+        int course = ready.front();
+        ready.pop();
+        ++taken;
+        for (int next : unlocks[course])
+            if (--indegree[next] == 0) ready.push(next);
+    }
+    return taken == n;
+}
+'''
+java = '''
+public boolean canFinish(int n, int[][] prerequisites) {
+    List<List<Integer>> unlocks = new ArrayList<>();
+    for (int c = 0; c < n; c++) unlocks.add(new ArrayList<>());
+    int[] indegree = new int[n];
+    for (int[] p : prerequisites) {
+        unlocks.get(p[1]).add(p[0]);
+        indegree[p[0]]++;
+    }
+    Deque<Integer> ready = new ArrayDeque<>();
+    for (int c = 0; c < n; c++)
+        if (indegree[c] == 0) ready.add(c);
+    int taken = 0;
+    while (!ready.isEmpty()) {
+        int course = ready.poll();
+        taken++;
+        for (int next : unlocks.get(course))
+            if (--indegree[next] == 0) ready.add(next);
+    }
+    return taken == n;
+}
+'''
+
+[[perf]]
+label = "n = 100 000, one long chain of prerequisites"
+code = '''
+n = 100_000
+order = rng.sample(range(n), n)
+edges = [[order[i + 1], order[i]] for i in range(n - 1)]
+for _ in range(100_000):
+    i, j = sorted(rng.sample(range(n), 2))
+    edges.append([order[j], order[i]])
+rng.shuffle(edges)
+args = [n, edges]
+'''
+
+[[perf]]
+label = "n = 100 000, the same chain closed into a cycle"
+code = '''
+n = 100_000
+order = rng.sample(range(n), n)
+edges = [[order[i + 1], order[i]] for i in range(n - 1)] + [[order[0], order[-1]]]
+rng.shuffle(edges)
+args = [n, edges]
+'''
+
+[scale]
+label = "n = courses, with 2n prerequisites"
+# Graph searches are memory-bound: past ~10^5 nodes, cache misses blur the growth
+sizes = [1000, 2000, 4000, 8000, 16000, 32000, 64000, 128000]
+code = '''
+order = rng.sample(range(n), n)
+edges = [[order[i + 1], order[i]] for i in range(n - 1)]
+for _ in range(n):
+    i, j = sorted(rng.sample(range(n), 2))
+    edges.append([order[j], order[i]])
+args = [n, edges]
+'''

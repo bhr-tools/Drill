@@ -1,0 +1,66 @@
+title = "Longest increasing subsequence"
+tags = ["dp", "binary-search"]
+target = 480
+signature = "lis_length(nums: list[int]) -> int"
+statement = """
+Return the length of the longest strictly increasing subsequence of nums
+(not necessarily contiguous). The performance test needs O(n log n).
+"""
+hint = "tails[i] = smallest tail of an increasing subsequence of length i + 1; place each x with a lower-bound search."
+complexity = "O(n log n)"
+tests = [
+  { in = [[10, 9, 2, 5, 3, 7, 101, 18]], out = 4 },
+  { in = [[0, 1, 0, 3, 2, 3]], out = 4 },
+  { in = [[7, 7, 7, 7]], out = 1 },
+  { in = [[1]], out = 1 },
+  { in = [[]], out = 0 },
+  { in = [[4, 10, 4, 3, 8, 9]], out = 3 },
+  { in = [[1, 3, 6, 7, 9, 4, 10, 5, 6]], out = 6 },
+]
+
+[solutions]
+python = '''
+from bisect import bisect_left
+
+def lis_length(nums: list[int]) -> int:
+    tails = []
+    for x in nums:
+        i = bisect_left(tails, x)
+        if i == len(tails):
+            tails.append(x)
+        else:
+            tails[i] = x
+    return len(tails)
+'''
+cpp = '''
+int lisLength(vector<int>& nums) {
+    vector<int> tails;
+    for (int x : nums) {
+        auto it = lower_bound(tails.begin(), tails.end(), x);
+        if (it == tails.end()) tails.push_back(x);
+        else *it = x;
+    }
+    return tails.size();
+}
+'''
+java = '''
+public int lisLength(int[] nums) {
+    int[] tails = new int[nums.length];
+    int size = 0;
+    for (int x : nums) {
+        int i = Arrays.binarySearch(tails, 0, size, x);
+        if (i < 0) i = -(i + 1);
+        tails[i] = x;
+        if (i == size) size++;
+    }
+    return size;
+}
+'''
+
+[[perf]]
+label = "n = 300 000"
+in = "[[rng.randint(-10**9, 10**9) for _ in range(300_000)]]"
+
+[scale]
+label = "n = len(nums)"
+in = "[[rng.randint(-10**9, 10**9) for _ in range(n)]]"

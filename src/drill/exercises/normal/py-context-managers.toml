@@ -1,0 +1,104 @@
+title = "Context managers, two ways"
+kind = "code"
+tags = ["python", "idiom", "context-manager", "contextlib"]
+target = 420
+statement = """
+- temp_attr(obj, name, value): a context manager written with
+  @contextlib.contextmanager that sets obj.name to value for the duration of the
+  with block, then restores the previous value — or deletes the attribute if it
+  did not exist — even when the block raises. It yields obj.
+- Suppress(*exceptions): a class with __enter__ / __exit__ that silences the given
+  exception types (and their subclasses), like contextlib.suppress. `with
+  Suppress(...) as s` binds the Suppress object.
+"""
+hint = "try / yield / finally with a sentinel object for 'missing'; __exit__ returns True to swallow the exception."
+
+[starter]
+python = '''
+from contextlib import contextmanager
+
+
+@contextmanager
+def temp_attr(obj, name, value):
+    pass
+
+
+class Suppress:
+    def __init__(self, *exceptions):
+        pass
+'''
+
+[setup]
+python = '''
+class Config:
+    debug = False
+
+
+def leak():
+    with Suppress(KeyError):
+        raise ValueError("not suppressed")
+
+
+def subclass():
+    with Suppress(LookupError):
+        {}["missing"]
+    return "survived"
+'''
+
+[checks]
+python = '''
+c = Config()
+with temp_attr(c, "debug", True) as yielded:
+    check("set inside the block", c.debug, True)
+    check("yields the object", yielded is c, True)
+check("restored after", c.debug, False)
+try:
+    with temp_attr(c, "debug", True):
+        raise KeyError("boom")
+except KeyError:
+    pass
+check("restored after an exception", c.debug, False)
+with temp_attr(c, "extra", 1):
+    check("new attribute inside", c.extra, 1)
+check("new attribute removed", hasattr(c, "extra"), False)
+with Suppress(ZeroDivisionError, KeyError):
+    1 / 0
+check("suppressed", True)
+raises("other exceptions propagate", ValueError, leak)
+check("subclasses are suppressed", subclass(), "survived")
+with Suppress(KeyError) as s:
+    pass
+check("as binds the manager", isinstance(s, Suppress), True)
+'''
+
+[solutions]
+python = '''
+from contextlib import contextmanager
+
+_MISSING = object()
+
+
+@contextmanager
+def temp_attr(obj, name, value):
+    old = getattr(obj, name, _MISSING)
+    setattr(obj, name, value)
+    try:
+        yield obj
+    finally:
+        if old is _MISSING:
+            delattr(obj, name)
+        else:
+            setattr(obj, name, old)
+
+
+class Suppress:
+    def __init__(self, *exceptions):
+        self.exceptions = exceptions
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        # A true return value swallows the exception
+        return exc_type is not None and issubclass(exc_type, self.exceptions)
+'''

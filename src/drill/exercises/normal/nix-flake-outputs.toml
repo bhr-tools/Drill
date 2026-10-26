@@ -1,0 +1,185 @@
+title = "Flake outputs for every system"
+kind = "code"
+file = "flake.nix"
+tags = ["nix", "flakes", "packages", "apps"]
+target = 360
+statement = """
+Write flake.nix with, for x86_64-linux and aarch64-linux:
+- packages.<system>.default: a script hello-drill (writeShellScriptBin) that
+  prints "Hello from drill";
+- apps.<system>.default: an app running it ({ type = "app"; program = "…"; }).
+The flake's only input is nixpkgs. Try it: nix run, nix flake show.
+"""
+hint = "let forAllSystems = f: nixpkgs.lib.genAttrs [ … ] (system: f nixpkgs.legacyPackages.${system}); in { packages = forAllSystems (pkgs: { … }); apps = … }"
+explanation = """
+A flake's outputs are plain attribute sets, keyed by system: nothing picks the
+current machine for you, which is what keeps them pure and cacheable. A small
+forAllSystems helper over lib.genAttrs is the usual way to write each output
+once. In apps, refer to the package through self (self.packages.${system}.default)
+rather than building it twice; lib.getExe gives its main program.
+
+Evaluating packages.aarch64-linux.default on an x86_64 machine is fine: nothing
+is built until you ask for it.
+"""
+
+[starter]
+nix = '''
+{
+  description = "Hello from drill";
+
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+
+  outputs = { self, nixpkgs }: {
+  };
+}
+'''
+
+[setup]
+nix = '''
+flake = loadFlake dir;
+package = flake.packages.${system}.default;
+app = flake.apps.${system}.default;
+'''
+
+[checks]
+nix = '''
+(check "packages for both systems" (builtins.attrNames flake.packages) [ "aarch64-linux" "x86_64-linux" ])
+(check "the package is hello-drill" (package.name or null) "hello-drill")
+(check "the aarch64 package is for aarch64" flake.packages.aarch64-linux.default.system "aarch64-linux")
+(check "it prints the greeting" (sh "${package}/bin/hello-drill") "Hello from drill\n")
+(check "apps for both systems" (builtins.attrNames (flake.apps or { })) [ "aarch64-linux" "x86_64-linux" ])
+(check "the app's type" (app.type or null) "app")
+(check "the app runs the package" (app.program or null) "${package}/bin/hello-drill")
+'''
+
+[solutions]
+nix = '''
+{
+  description = "Hello from drill";
+
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+
+  outputs = { self, nixpkgs }:
+    let
+      forAllSystems = f:
+        nixpkgs.lib.genAttrs [ "x86_64-linux" "aarch64-linux" ] (system: f system nixpkgs.legacyPackages.${system});
+    in
+    {
+      packages = forAllSystems (system: pkgs: {
+        default = pkgs.writeShellScriptBin "hello-drill" ''
+          echo "Hello from drill"
+        '';
+      });
+
+      apps = forAllSystems (system: pkgs: {
+        default = {
+          type = "app";
+          program = nixpkgs.lib.getExe self.packages.${system}.default;
+        };
+      });
+    };
+}
+'''
+
+[[variants]]
+statement = """
+Write flake.nix with:
+- overlays.default: an overlay adding drill-hello, a script (writeShellScriptBin)
+  printing "hi";
+- packages.<system>.default for x86_64-linux and aarch64-linux: drill-hello, taken
+  from nixpkgs with that overlay applied (not written a second time).
+The flake's only input is nixpkgs. Try it: nix build, nix flake show.
+"""
+hint = "pkgs = import nixpkgs { inherit system; overlays = [ self.overlays.default ]; }, or nixpkgs.legacyPackages.${system}.extend self.overlays.default"
+explanation = """
+Exporting an overlay lets other flakes add your packages to their own nixpkgs,
+built with their versions of the dependencies. Building packages through the
+same overlay guarantees that what you test is what they get.
+"""
+[variants.setup]
+nix = '''
+flake = loadFlake dir;
+'''
+[variants.checks]
+nix = '''
+(check "an overlay" (flake ? overlays && flake.overlays ? default) true)
+(check "the overlay adds drill-hello" ((pkgs.extend flake.overlays.default).drill-hello.name or null) "drill-hello")
+(check "packages for both systems" (builtins.attrNames flake.packages) [ "aarch64-linux" "x86_64-linux" ])
+(check "the package is drill-hello" (flake.packages.${system}.default.name or null) "drill-hello")
+(check "the aarch64 package is for aarch64" flake.packages.aarch64-linux.default.system "aarch64-linux")
+(check "it prints hi" (sh "${flake.packages.${system}.default}/bin/drill-hello") "hi\n")
+'''
+[variants.solutions]
+nix = '''
+{
+  description = "Hello from drill";
+
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+
+  outputs = { self, nixpkgs }: {
+    overlays.default = final: prev: {
+      drill-hello = final.writeShellScriptBin "drill-hello" ''
+        echo hi
+      '';
+    };
+
+    packages = nixpkgs.lib.genAttrs [ "x86_64-linux" "aarch64-linux" ] (system: {
+      default = (nixpkgs.legacyPackages.${system}.extend self.overlays.default).drill-hello;
+    });
+  };
+}
+'''
+
+[[variants]]
+statement = """
+Write flake.nix with:
+- nixosModules.default: a NixOS module setting services.getty.greetingLine to
+  "<<< drill >>>" and adding the package htop to environment.systemPackages;
+- nixosConfigurations.vm: an x86_64-linux system using that module, with what any
+  system needs: boot.loader.grub.device = "nodev", a root filesystem
+  fileSystems."/" with device "/dev/vda" and fsType "ext4", and
+  system.stateVersion = "25.05".
+The flake's only input is nixpkgs. Try it in nix repl (:lf .).
+"""
+hint = "nixosConfigurations.vm = nixpkgs.lib.nixosSystem { modules = [ self.nixosModules.default { nixpkgs.hostPlatform = …; … } ]; };"
+[variants.setup]
+nix = '''
+flake = loadFlake dir;
+vm = flake.nixosConfigurations.vm.config;
+'''
+[variants.checks]
+nix = '''
+(check "a module" (flake ? nixosModules && flake.nixosModules ? default) true)
+(check "the module alone sets the greeting" (nixos [ flake.nixosModules.default ]).config.services.getty.greetingLine "<<< drill >>>")
+(check "the vm's greeting" vm.services.getty.greetingLine "<<< drill >>>")
+(check "htop is installed on the vm" (builtins.elem "htop" (map lib.getName vm.environment.systemPackages)) true)
+(check "the vm is x86_64-linux" vm.nixpkgs.hostPlatform.system "x86_64-linux")
+(check "its root filesystem" vm.fileSystems."/".device "/dev/vda")
+'''
+[variants.solutions]
+nix = '''
+{
+  description = "Hello from drill";
+
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+
+  outputs = { self, nixpkgs }: {
+    nixosModules.default = { pkgs, ... }: {
+      services.getty.greetingLine = "<<< drill >>>";
+      environment.systemPackages = [ pkgs.htop ];
+    };
+
+    nixosConfigurations.vm = nixpkgs.lib.nixosSystem {
+      modules = [
+        self.nixosModules.default
+        {
+          nixpkgs.hostPlatform = "x86_64-linux";
+          boot.loader.grub.device = "nodev";
+          fileSystems."/" = { device = "/dev/vda"; fsType = "ext4"; };
+          system.stateVersion = "25.05";
+        }
+      ];
+    };
+  };
+}
+'''

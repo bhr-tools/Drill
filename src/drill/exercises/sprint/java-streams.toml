@@ -1,0 +1,50 @@
+title = "Stream pipelines"
+kind = "code"
+tags = ["java", "idiom", "streams"]
+target = 75
+statement = """
+In class Streams:
+- sumOfEvenSquares(xs): the sum of the squares of the even numbers;
+- upperSorted(words): the words in uppercase, without duplicates, sorted.
+One stream pipeline each.
+"""
+hint = "filter / mapToInt / sum; map(String::toUpperCase) / distinct / sorted / toList."
+
+[starter]
+java = '''
+import java.util.*;
+import java.util.stream.*;
+
+class Streams {
+    static int sumOfEvenSquares(List<Integer> xs) {
+    }
+
+    static List<String> upperSorted(List<String> words) {
+    }
+}
+'''
+
+[checks]
+java = '''
+check("even squares", Streams.sumOfEvenSquares(List.of(1, 2, 3, 4)), 20);
+check("negative numbers", Streams.sumOfEvenSquares(List.of(-2, -3)), 4);
+check("empty", Streams.sumOfEvenSquares(List.of()), 0);
+check("upper, distinct, sorted", Streams.upperSorted(List.of("pear", "Apple", "pear", "fig")), List.of("APPLE", "FIG", "PEAR"));
+check("empty list", Streams.upperSorted(List.of()), List.of());
+'''
+
+[solutions]
+java = '''
+import java.util.*;
+import java.util.stream.*;
+
+class Streams {
+    static int sumOfEvenSquares(List<Integer> xs) {
+        return xs.stream().filter(x -> x % 2 == 0).mapToInt(x -> x * x).sum();
+    }
+
+    static List<String> upperSorted(List<String> words) {
+        return words.stream().map(String::toUpperCase).distinct().sorted().toList();
+    }
+}
+'''

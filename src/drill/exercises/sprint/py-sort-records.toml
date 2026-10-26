@@ -1,0 +1,38 @@
+title = "Sort records by several keys"
+kind = "code"
+tags = ["python", "idiom", "sorting"]
+target = 75
+statement = """
+sort_people(people) returns a new list of the person dicts ({"name", "age"})
+sorted by age, oldest first, then by name in ascending order. The input list
+is not modified.
+"""
+hint = "sorted(..., key=lambda p: (-p['age'], p['name']))."
+
+[starter]
+python = '''
+def sort_people(people: list[dict]) -> list[dict]:
+    pass
+'''
+
+[checks]
+python = '''
+people = [
+    {"name": "Bob", "age": 30},
+    {"name": "alice", "age": 30},
+    {"name": "Chloe", "age": 25},
+    {"name": "Alice", "age": 41},
+]
+before = [dict(p) for p in people]
+result = sort_people(people)
+check("order", [p["name"] for p in result], ["Alice", "Bob", "alice", "Chloe"])
+check("input untouched", people, before)
+check("a new list", result is not people, True)
+check("empty", sort_people([]), [])
+'''
+
+[solutions]
+python = '''
+def sort_people(people: list[dict]) -> list[dict]:
+    return sorted(people, key=lambda p: (-p["age"], p["name"]))
+'''

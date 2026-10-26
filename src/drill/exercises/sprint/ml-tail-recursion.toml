@@ -1,0 +1,68 @@
+title = "Tail recursion with an accumulator"
+tags = ["ocaml", "idiom", "recursion", "tail-call"]
+target = 90
+signature = "range(a: int, b: int) -> list[int]"
+statement = """
+The list [a; a+1; …; b-1], empty when a >= b. Write it with a tail-recursive
+inner function and an accumulator, building from the end so that no List.rev
+is needed.
+"""
+hint = "let rec go acc k = if k < a then acc else go (k :: acc) (k - 1) in go [] (b - 1)"
+tests = [
+  { in = [0, 4], out = [0, 1, 2, 3] },
+  { in = [3, 3], out = [] },
+  { in = [5, 2], out = [] },
+  { in = [-2, 1], out = [-2, -1, 0] },
+  { in = [7, 8], out = [7] },
+]
+
+[solutions]
+ocaml = '''
+let range a b =
+  let rec go acc k = if k < a then acc else go (k :: acc) (k - 1) in
+  go [] (b - 1)
+'''
+
+[[variants]]
+signature = "digits(n: int) -> list[int]"
+statement = """
+The decimal digits of n >= 0, most significant first: 4096 gives [4; 0; 9; 6]
+and 0 gives [0]. Tail-recursive, with an accumulator: the order comes for free.
+"""
+hint = "Peel off n mod 10 and cons it onto the accumulator, until n < 10."
+tests = [
+  { in = [4096], out = [4, 0, 9, 6] },
+  { in = [0], out = [0] },
+  { in = [7], out = [7] },
+  { in = [10], out = [1, 0] },
+  { in = [123456789], out = [1, 2, 3, 4, 5, 6, 7, 8, 9] },
+]
+[variants.solutions]
+ocaml = '''
+let digits n =
+  let rec go acc n = if n < 10 then n :: acc else go ((n mod 10) :: acc) (n / 10) in
+  go [] n
+'''
+
+[[variants]]
+signature = "collatz_steps(n: int) -> int"
+statement = """
+How many steps the Collatz process takes to reach 1 from n >= 1: halve n when
+it is even, else replace it with 3n + 1. A tail-recursive loop with a counter.
+"""
+hint = "let rec go steps n = if n = 1 then steps else go (steps + 1) (…) in go 0 n"
+tests = [
+  { in = [1], out = 0 },
+  { in = [2], out = 1 },
+  { in = [6], out = 8 },
+  { in = [27], out = 111 },
+  { in = [97], out = 118 },
+]
+[variants.solutions]
+ocaml = '''
+let collatz_steps n =
+  let rec go steps n =
+    if n = 1 then steps else go (steps + 1) (if n mod 2 = 0 then n / 2 else (3 * n) + 1)
+  in
+  go 0 n
+'''

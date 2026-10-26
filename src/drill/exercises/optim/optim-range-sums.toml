@@ -1,0 +1,118 @@
+title = "Range sums"
+tags = ["optim", "prefix-sum"]
+target = 300
+signature = "range_sums(nums: list[int], queries: list[list[int]]) -> list[long]"
+complexity = "O(n)"
+statement = """
+Each query [l, r] asks for nums[l] + ... + nums[r] (inclusive, 0-based).
+range_sums returns the answer of every query, in order.
+
+The code you start with is correct, but too slow for the performance test.
+1. Estimate its complexity, then press c to measure it.
+2. Make it fast enough, and measure again.
+"""
+hint = "Precompute prefix[i] = nums[0] + ... + nums[i - 1] once; then a range sum is a difference."
+explanation = """
+Summing each range separately costs up to O(n) per query, O(n·q) in total.
+Yet every query re-adds numbers that the previous ones already added.
+
+Prefix sums do the additions once: prefix[0] = 0 and
+prefix[i + 1] = prefix[i] + nums[i], built in O(n). Then
+
+    nums[l] + ... + nums[r] = prefix[r + 1] - prefix[l]
+
+is O(1) per query, O(n + q) in total. This trades O(n) memory for time, and it
+works for any operation that can be undone: sums, XOR, counts. It does not work
+for min or max, which have no inverse; those need a sparse table or a segment
+tree. The same idea in two dimensions gives the sum of any rectangle in O(1).
+
+Python: itertools.accumulate(nums, initial=0). C++: std::partial_sum, with a
+long long accumulator, since sums can exceed an int.
+"""
+tests = [
+  { in = [[1, 2, 3, 4], [[0, 3], [1, 2], [2, 2]]], out = [10, 5, 3] },
+  { in = [[5], [[0, 0]]], out = [5] },
+  { in = [[-1, 4, -3], [[0, 1], [0, 2], [1, 2]]], out = [3, 0, 1] },
+  { in = [[1, 2], []], out = [] },
+]
+
+[starter]
+python = '''
+def range_sums(nums: list[int], queries: list[list[int]]) -> list[int]:
+    return [sum(nums[l:r + 1]) for l, r in queries]
+'''
+cpp = '''
+#include <bits/stdc++.h>
+using namespace std;
+
+
+            vector<long long> rangeSums(vector<int>& nums, vector<vector<int>>& queries) {
+                vector<long long> out;
+                for (auto& q : queries) {
+                    long long total = 0;
+                    for (int i = q[0]; i <= q[1]; ++i) total += nums[i];
+                    out.push_back(total);
+                }
+                return out;
+            }
+'''
+java = '''
+import java.util.*;
+
+
+            class Solution {
+                public long[] rangeSums(int[] nums, int[][] queries) {
+                    long[] out = new long[queries.length];
+                    for (int k = 0; k < queries.length; k++)
+                        for (int i = queries[k][0]; i <= queries[k][1]; i++) out[k] += nums[i];
+                    return out;
+                }
+            }
+'''
+
+[solutions]
+python = '''
+from itertools import accumulate
+
+
+def range_sums(nums: list[int], queries: list[list[int]]) -> list[int]:
+    prefix = list(accumulate(nums, initial=0))
+    return [prefix[r + 1] - prefix[l] for l, r in queries]
+'''
+cpp = '''
+vector<long long> rangeSums(vector<int>& nums, vector<vector<int>>& queries) {
+    vector<long long> prefix(nums.size() + 1);
+    for (size_t i = 0; i < nums.size(); ++i) prefix[i + 1] = prefix[i] + nums[i];
+    vector<long long> out;
+    out.reserve(queries.size());
+    for (auto& q : queries) out.push_back(prefix[q[1] + 1] - prefix[q[0]]);
+    return out;
+}
+'''
+java = '''
+public long[] rangeSums(int[] nums, int[][] queries) {
+    long[] prefix = new long[nums.length + 1];
+    for (int i = 0; i < nums.length; i++) prefix[i + 1] = prefix[i] + nums[i];
+    long[] out = new long[queries.length];
+    for (int k = 0; k < queries.length; k++)
+        out[k] = prefix[queries[k][1] + 1] - prefix[queries[k][0]];
+    return out;
+}
+'''
+
+[[perf]]
+label = "len(nums) = len(queries) = 200 000, long ranges"
+code = '''
+n = 200_000
+nums = [rng.randint(-10_000, 10_000) for _ in range(n)]
+queries = [[rng.randrange(n // 10), rng.randrange(9 * n // 10, n)] for _ in range(n)]
+args = [nums, queries]
+'''
+
+[scale]
+label = "n = len(nums) = len(queries)"
+code = '''
+nums = [rng.randint(-10_000, 10_000) for _ in range(n)]
+queries = [[rng.randrange(max(1, n // 10)), rng.randrange(9 * n // 10, n)] for _ in range(n)]
+args = [nums, queries]
+'''

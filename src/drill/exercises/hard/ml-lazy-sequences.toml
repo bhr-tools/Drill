@@ -1,0 +1,81 @@
+title = "Infinite sequences with Seq"
+kind = "code"
+tags = ["ocaml", "laziness", "seq", "higher-order"]
+target = 720
+statement = """
+Seq.t is OCaml's lazy sequence: a function that computes the next node on demand.
+Write, without building any list:
+- naturals: 0, 1, 2, … (infinite).
+- fibs: 0, 1, 1, 2, 3, 5, … (infinite, each step O(1)).
+- primes: 2, 3, 5, 7, … (infinite; trial division by the primes found so far
+  up to the square root is fine).
+- take n s: the first n elements as a list (Seq.take exists since 4.14: write
+  your own, by matching on s ()).
+- windows k s: the sliding windows of k consecutive elements, as lists:
+  windows 2 (1, 2, 3) is ([1; 2], [2; 3]). It must work on infinite sequences.
+"""
+hint = "let rec from n () = Seq.Cons (n, from (n + 1)); fibs: an inner function of the last two values."
+explanation = """
+A Seq.t is unit -> node: nothing is computed until someone calls it, and each
+call computes one more node. That is how a sequence can be infinite: only the
+prefix you consume ever exists. Unlike Lazy.t, a Seq.t is not memoised, so
+traversing it twice computes it twice; Seq.memoize (OCaml 4.14) caches it.
+
+windows must never look further than needed: it peeks k elements ahead with
+take, then moves on from the tail of the sequence, so it works on naturals.
+"""
+
+[starter]
+ocaml = '''
+let naturals : int Seq.t = fun () -> failwith "todo"
+
+let fibs : int Seq.t = fun () -> failwith "todo"
+
+let primes : int Seq.t = fun () -> failwith "todo"
+
+let rec take (n : int) (s : 'a Seq.t) : 'a list = failwith "todo"
+
+let rec windows (k : int) (s : 'a Seq.t) : 'a list Seq.t = fun () -> failwith "todo"
+'''
+
+[checks]
+ocaml = '''
+let show = Show.(list int) in
+check_eq ~show "naturals" (take 5 naturals) [ 0; 1; 2; 3; 4 ];
+check_eq ~show "take 0" (take 0 naturals) [];
+check_eq ~show "take past the end" (take 5 (List.to_seq [ 1; 2 ])) [ 1; 2 ];
+check_eq ~show "fibs" (take 10 fibs) [ 0; 1; 1; 2; 3; 5; 8; 13; 21; 34 ];
+check_eq ~show "primes" (take 10 primes) [ 2; 3; 5; 7; 11; 13; 17; 19; 23; 29 ];
+check_eq ~show:Show.int "the 1000th prime" (List.nth (take 1000 primes) 999) 7919;
+check_eq ~show:Show.int "fibs is linear" (List.nth (take 80 fibs) 79) 14472334024676221;
+let show = Show.(list (list int)) in
+check_eq ~show "windows" (List.of_seq (windows 2 (List.to_seq [ 1; 2; 3 ]))) [ [ 1; 2 ]; [ 2; 3 ] ];
+check_eq ~show "windows too short" (List.of_seq (windows 3 (List.to_seq [ 1; 2 ]))) [];
+check_eq ~show "windows on an infinite sequence" (take 2 (windows 3 naturals)) [ [ 0; 1; 2 ]; [ 1; 2; 3 ] ];
+'''
+
+[solutions]
+ocaml = '''
+let naturals =
+  let rec from n () = Seq.Cons (n, from (n + 1)) in
+  from 0
+
+let fibs =
+  let rec go a b () = Seq.Cons (a, go b (a + b)) in
+  go 0 1
+
+let rec take n s =
+  if n <= 0 then [] else match s () with Seq.Nil -> [] | Seq.Cons (x, rest) -> x :: take (n - 1) rest
+
+let primes =
+  let rec go found n () =
+    if List.exists (fun p -> p * p <= n && n mod p = 0) found then go found (n + 1) ()
+    else Seq.Cons (n, go (found @ [ n ]) (n + 1))
+  in
+  go [] 2
+
+let rec windows k s () =
+  let window = take k s in
+  if List.length window < k then Seq.Nil
+  else match s () with Seq.Nil -> Seq.Nil | Seq.Cons (_, rest) -> Seq.Cons (window, windows k rest)
+'''

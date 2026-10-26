@@ -1,0 +1,414 @@
+title = "Trie with counts and completion"
+kind = "code"
+tags = ["design", "trie", "tree", "recursion"]
+target = 1200
+statement = """
+A set of words stored as a trie:
+- insert(word) adds a word, returning false if it was already there;
+- contains(word); count_prefix(prefix): how many words start with prefix, in
+  O(len(prefix));
+- remove(word) returns false if absent, and frees the branches left empty;
+- complete(prefix, limit): up to limit words starting with prefix, in
+  alphabetical order;
+- the number of words: len(trie) / size().
+
+Python: `word in trie` for contains. Java: countPrefix.
+C++: queries are const; nodes are owned with std::unique_ptr.
+"""
+hint = "Each node keeps its children in an ordered map, an end-of-word flag and the number of words in its subtree; a depth-first walk gives sorted completions."
+
+[starter]
+python = '''
+class Trie:
+    def __init__(self):
+        pass
+
+    def insert(self, word: str) -> bool:
+        pass
+
+    def __contains__(self, word: str) -> bool:
+        pass
+
+    def count_prefix(self, prefix: str) -> int:
+        pass
+
+    def remove(self, word: str) -> bool:
+        pass
+
+    def complete(self, prefix: str, limit: int) -> list[str]:
+        pass
+
+    def __len__(self) -> int:
+        pass
+'''
+cpp = '''
+#include <bits/stdc++.h>
+
+class Trie {
+public:
+    bool insert(std::string_view word) {}
+    bool contains(std::string_view word) const {}
+    std::size_t count_prefix(std::string_view prefix) const {}
+    bool remove(std::string_view word) {}
+    std::vector<std::string> complete(std::string_view prefix, std::size_t limit) const {}
+    std::size_t size() const {}
+};
+'''
+java = '''
+import java.util.*;
+
+class Trie {
+    boolean insert(String word) {
+    }
+
+    boolean contains(String word) {
+    }
+
+    int countPrefix(String prefix) {
+    }
+
+    boolean remove(String word) {
+    }
+
+    List<String> complete(String prefix, int limit) {
+    }
+
+    int size() {
+    }
+}
+'''
+
+[checks]
+python = '''
+t = Trie()
+for w in ["car", "card", "care", "cat", "dog", "do"]:
+    t.insert(w)
+check("insert a duplicate", t.insert("car"), False)
+check("len", len(t), 6)
+check("contains", "card" in t, True)
+check("a prefix is not a word", "ca" in t, False)
+check("count_prefix", t.count_prefix("car"), 3)
+check("empty prefix counts everything", t.count_prefix(""), 6)
+check("complete in order", t.complete("ca", 10), ["car", "card", "care", "cat"])
+check("complete with a limit", t.complete("ca", 2), ["car", "card"])
+check("complete unknown prefix", t.complete("x", 5), [])
+check("remove", t.remove("car"), True)
+check("removed", "car" in t, False)
+check("longer words stay", "card" in t, True)
+check("count after remove", t.count_prefix("car"), 2)
+check("remove a non-word", t.remove("ca"), False)
+check("len after remove", len(t), 5)
+t.remove("do")
+check("dog survives removing do", t.complete("d", 5), ["dog"])
+words = [f"w{i:06d}" for i in range(0, 200_000, 3)]
+big = Trie()
+for w in words:
+    big.insert(w)
+check("big count", big.count_prefix("w1"), sum(w.startswith("w1") for w in words))
+check("big complete", big.complete("w19999", 3), ["w199992", "w199995", "w199998"])
+'''
+cpp = '''
+Trie t;
+for (std::string_view w : {"car", "card", "care", "cat", "dog", "do"}) t.insert(w);
+CHECK(!t.insert("car"));
+CHECK_EQ(t.size(), std::size_t{6});
+CHECK(t.contains("card"));
+CHECK(!t.contains("ca"));
+CHECK_EQ(t.count_prefix("car"), std::size_t{3});
+CHECK_EQ(t.count_prefix(""), std::size_t{6});
+CHECK_EQ(t.complete("ca", 10), std::vector<std::string>{"car", "card", "care", "cat"});
+CHECK_EQ(t.complete("ca", 2), std::vector<std::string>{"car", "card"});
+CHECK(t.complete("x", 5).empty());
+CHECK(t.remove("car"));
+CHECK(!t.contains("car"));
+CHECK(t.contains("card"));
+CHECK_EQ(t.count_prefix("car"), std::size_t{2});
+CHECK(!t.remove("ca"));
+CHECK_EQ(t.size(), std::size_t{5});
+t.remove("do");
+CHECK_EQ(t.complete("d", 5), std::vector<std::string>{"dog"});
+const Trie& view = t;
+CHECK(view.contains("dog"));
+std::vector<std::string> words;
+for (int i = 0; i < 200'000; i += 3) {
+    char buf[16];
+    std::snprintf(buf, sizeof buf, "w%06d", i);
+    words.emplace_back(buf);
+}
+Trie big;
+for (const auto& w : words) big.insert(w);
+auto expected = static_cast<std::size_t>(std::ranges::count_if(words, [](const std::string& w) { return w.starts_with("w1"); }));
+CHECK_EQ(big.count_prefix("w1"), expected);
+CHECK_EQ(big.complete("w19999", 3), std::vector<std::string>{"w199992", "w199995", "w199998"});
+'''
+java = '''
+Trie t = new Trie();
+for (String w : List.of("car", "card", "care", "cat", "dog", "do")) t.insert(w);
+check("insert a duplicate", t.insert("car"), false);
+check("size", t.size(), 6);
+check("contains", t.contains("card"), true);
+check("a prefix is not a word", t.contains("ca"), false);
+check("countPrefix", t.countPrefix("car"), 3);
+check("empty prefix counts everything", t.countPrefix(""), 6);
+check("complete in order", t.complete("ca", 10), List.of("car", "card", "care", "cat"));
+check("complete with a limit", t.complete("ca", 2), List.of("car", "card"));
+check("complete unknown prefix", t.complete("x", 5), List.of());
+check("remove", t.remove("car"), true);
+check("removed", t.contains("car"), false);
+check("longer words stay", t.contains("card"), true);
+check("count after remove", t.countPrefix("car"), 2);
+check("remove a non-word", t.remove("ca"), false);
+check("size after remove", t.size(), 5);
+t.remove("do");
+check("dog survives removing do", t.complete("d", 5), List.of("dog"));
+List<String> words = new ArrayList<>();
+for (int i = 0; i < 200_000; i += 3) words.add(String.format("w%06d", i));
+Trie big = new Trie();
+for (String w : words) big.insert(w);
+check("big count", big.countPrefix("w1"), (int) words.stream().filter(w -> w.startsWith("w1")).count());
+check("big complete", big.complete("w19999", 3), List.of("w199992", "w199995", "w199998"));
+'''
+
+[solutions]
+python = '''
+class _Node:
+    __slots__ = ("children", "end", "count")
+
+    def __init__(self):
+        self.children = {}
+        self.end = False
+        self.count = 0  # words ending in this subtree
+
+
+class Trie:
+    def __init__(self):
+        self.root = _Node()
+
+    def _find(self, prefix):
+        node = self.root
+        for c in prefix:
+            node = node.children.get(c)
+            if node is None:
+                return None
+        return node
+
+    def insert(self, word: str) -> bool:
+        if word in self:
+            return False
+        node = self.root
+        node.count += 1
+        for c in word:
+            node = node.children.setdefault(c, _Node())
+            node.count += 1
+        node.end = True
+        return True
+
+    def __contains__(self, word: str) -> bool:
+        node = self._find(word)
+        return node is not None and node.end
+
+    def __len__(self) -> int:
+        return self.root.count
+
+    def count_prefix(self, prefix: str) -> int:
+        node = self._find(prefix)
+        return node.count if node else 0
+
+    def remove(self, word: str) -> bool:
+        if word not in self:
+            return False
+        node = self.root
+        node.count -= 1
+        for c in word:
+            child = node.children[c]
+            child.count -= 1
+            if child.count == 0:
+                del node.children[c]  # prune the branch left empty
+                return True
+            node = child
+        node.end = False
+        return True
+
+    def complete(self, prefix: str, limit: int) -> list[str]:
+        found = []
+
+        def walk(node, path):
+            if len(found) == limit:
+                return
+            if node.end:
+                found.append(path)
+            for c in sorted(node.children):
+                walk(node.children[c], path + c)
+
+        node = self._find(prefix)
+        if node:
+            walk(node, prefix)
+        return found
+'''
+cpp = '''
+#include <bits/stdc++.h>
+
+class Trie {
+public:
+    bool insert(std::string_view word) {
+        if (contains(word)) return false;
+        Node* node = &root_;
+        ++node->count;
+        for (char c : word) {
+            auto& child = node->children[c];
+            if (!child) child = std::make_unique<Node>();
+            node = child.get();
+            ++node->count;
+        }
+        node->end = true;
+        return true;
+    }
+
+    bool contains(std::string_view word) const {
+        const Node* node = find(word);
+        return node && node->end;
+    }
+
+    std::size_t count_prefix(std::string_view prefix) const {
+        const Node* node = find(prefix);
+        return node ? node->count : 0;
+    }
+
+    bool remove(std::string_view word) {
+        if (!contains(word)) return false;
+        Node* node = &root_;
+        --node->count;
+        for (char c : word) {
+            auto it = node->children.find(c);
+            Node* child = it->second.get();
+            if (--child->count == 0) {
+                node->children.erase(it);  // the unique_ptr frees the whole branch
+                return true;
+            }
+            node = child;
+        }
+        node->end = false;
+        return true;
+    }
+
+    std::vector<std::string> complete(std::string_view prefix, std::size_t limit) const {
+        std::vector<std::string> found;
+        std::string path(prefix);
+        if (const Node* node = find(prefix)) collect(*node, path, limit, found);
+        return found;
+    }
+
+    std::size_t size() const { return root_.count; }
+
+private:
+    struct Node {
+        std::map<char, std::unique_ptr<Node>> children;  // ordered: completions come sorted
+        std::size_t count = 0;  // words ending in this subtree
+        bool end = false;
+    };
+
+    const Node* find(std::string_view prefix) const {
+        const Node* node = &root_;
+        for (char c : prefix) {
+            auto it = node->children.find(c);
+            if (it == node->children.end()) return nullptr;
+            node = it->second.get();
+        }
+        return node;
+    }
+
+    static void collect(const Node& node, std::string& path, std::size_t limit,
+                        std::vector<std::string>& found) {
+        if (found.size() == limit) return;
+        if (node.end) found.push_back(path);
+        for (const auto& [c, child] : node.children) {
+            path.push_back(c);
+            collect(*child, path, limit, found);
+            path.pop_back();
+        }
+    }
+
+    Node root_;
+};
+'''
+java = '''
+import java.util.*;
+
+class Trie {
+    private static final class Node {
+        final TreeMap<Character, Node> children = new TreeMap<>();  // ordered completions
+        int count;  // words ending in this subtree
+        boolean end;
+    }
+
+    private final Node root = new Node();
+
+    boolean insert(String word) {
+        if (contains(word)) return false;
+        Node node = root;
+        node.count++;
+        for (char c : word.toCharArray()) {
+            node = node.children.computeIfAbsent(c, k -> new Node());
+            node.count++;
+        }
+        node.end = true;
+        return true;
+    }
+
+    boolean contains(String word) {
+        Node node = find(word);
+        return node != null && node.end;
+    }
+
+    int countPrefix(String prefix) {
+        Node node = find(prefix);
+        return node == null ? 0 : node.count;
+    }
+
+    boolean remove(String word) {
+        if (!contains(word)) return false;
+        Node node = root;
+        node.count--;
+        for (char c : word.toCharArray()) {
+            Node child = node.children.get(c);
+            if (--child.count == 0) {
+                node.children.remove(c);
+                return true;
+            }
+            node = child;
+        }
+        node.end = false;
+        return true;
+    }
+
+    List<String> complete(String prefix, int limit) {
+        List<String> found = new ArrayList<>();
+        Node node = find(prefix);
+        if (node != null) collect(node, new StringBuilder(prefix), limit, found);
+        return found;
+    }
+
+    int size() {
+        return root.count;
+    }
+
+    private Node find(String prefix) {
+        Node node = root;
+        for (char c : prefix.toCharArray()) {
+            node = node.children.get(c);
+            if (node == null) return null;
+        }
+        return node;
+    }
+
+    private static void collect(Node node, StringBuilder path, int limit, List<String> found) {
+        if (found.size() == limit) return;
+        if (node.end) found.add(path.toString());
+        for (Map.Entry<Character, Node> e : node.children.entrySet()) {
+            path.append(e.getKey());
+            collect(e.getValue(), path, limit, found);
+            path.deleteCharAt(path.length() - 1);
+        }
+    }
+}
+'''

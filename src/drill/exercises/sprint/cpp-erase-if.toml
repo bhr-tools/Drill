@@ -1,0 +1,47 @@
+title = "Erase in place"
+kind = "code"
+tags = ["cpp", "idiom", "stl"]
+target = 60
+statement = """
+remove_odds(v) removes the odd numbers of v in place, keeping the order.
+remove_short(words, n) removes the words shorter than n characters and returns
+how many were removed. One line each with C++20.
+"""
+hint = "std::erase_if returns the number of erased elements. Careful: -5 % 2 is -1."
+
+[starter]
+cpp = '''
+#include <bits/stdc++.h>
+
+void remove_odds(std::vector<int>& v) {
+}
+
+std::size_t remove_short(std::vector<std::string>& words, std::size_t n) {
+}
+'''
+
+[checks]
+cpp = '''
+std::vector<int> v{1, 2, 3, 4, -5, -6, 7};
+remove_odds(v);
+CHECK_EQ(v, std::vector<int>{2, 4, -6});
+std::vector<int> none;
+remove_odds(none);
+CHECK(none.empty());
+std::vector<std::string> words{"a", "tree", "is", "green", "ok"};
+CHECK_EQ(remove_short(words, 3), std::size_t{3});
+CHECK_EQ(words, std::vector<std::string>{"tree", "green"});
+'''
+
+[solutions]
+cpp = '''
+#include <bits/stdc++.h>
+
+void remove_odds(std::vector<int>& v) {
+    std::erase_if(v, [](int x) { return x % 2 != 0; });  // x % 2 is -1 for negative odds
+}
+
+std::size_t remove_short(std::vector<std::string>& words, std::size_t n) {
+    return std::erase_if(words, [n](const std::string& w) { return w.size() < n; });
+}
+'''

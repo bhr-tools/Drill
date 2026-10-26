@@ -1,0 +1,184 @@
+title = "Versioned key-value store"
+kind = "code"
+tags = ["design", "binary-search", "ordered-map"]
+target = 900
+statement = """
+A TimeMap stores several versions of each key:
+- set(key, value, timestamp) records value at timestamp (timestamps may arrive
+  in any order; setting an existing timestamp replaces its value);
+- get(key, timestamp) returns the value with the greatest timestamp <= timestamp,
+  or "nothing".
+get must be logarithmic: the checks store a million versions (100 000 in Python).
+
+Python: get returns None when there is nothing.
+C++: get is const and returns std::optional<std::string>.
+Java: get returns null when there is nothing.
+"""
+hint = "Python: sorted timestamp lists + bisect. C++: std::map<int, std::string>::upper_bound, then step back. Java: TreeMap.floorEntry."
+
+[starter]
+python = '''
+class TimeMap:
+    def __init__(self):
+        pass
+
+    def set(self, key: str, value: str, timestamp: int) -> None:
+        pass
+
+    def get(self, key: str, timestamp: int) -> str | None:
+        pass
+'''
+cpp = '''
+#include <bits/stdc++.h>
+
+class TimeMap {
+public:
+    void set(const std::string& key, std::string value, int timestamp) {}
+
+    std::optional<std::string> get(const std::string& key, int timestamp) const {}
+};
+'''
+java = '''
+import java.util.*;
+
+class TimeMap {
+    void set(String key, String value, int timestamp) {
+    }
+
+    /** The latest value at or before timestamp, or null. */
+    String get(String key, int timestamp) {
+    }
+}
+'''
+
+[checks]
+python = '''
+tm = TimeMap()
+tm.set("color", "red", 10)
+tm.set("color", "blue", 20)
+check("before any version", tm.get("color", 5), None)
+check("exact timestamp", tm.get("color", 10), "red")
+check("between two versions", tm.get("color", 15), "red")
+check("after the last version", tm.get("color", 99), "blue")
+check("unknown key", tm.get("size", 99), None)
+tm.set("color", "green", 15)
+check("out-of-order insertion", tm.get("color", 17), "green")
+check("later version unaffected", tm.get("color", 20), "blue")
+tm.set("color", "black", 20)
+check("replacing a version", tm.get("color", 25), "black")
+big = TimeMap()
+for t in range(0, 200_000, 2):
+    big.set("k", str(t), t)
+check("many versions", big.get("k", 150_001), "150000")
+hits = sum(big.get("k", t) == str(t - t % 2) for t in range(1, 200_000, 7))
+check("many lookups", hits, len(range(1, 200_000, 7)))
+'''
+cpp = '''
+TimeMap tm;
+const TimeMap& view = tm;
+tm.set("color", "red", 10);
+tm.set("color", "blue", 20);
+CHECK(!view.get("color", 5));
+CHECK_EQ(view.get("color", 10), std::optional<std::string>("red"));
+CHECK_EQ(view.get("color", 15), std::optional<std::string>("red"));
+CHECK_EQ(view.get("color", 99), std::optional<std::string>("blue"));
+CHECK(!view.get("size", 99));
+tm.set("color", "green", 15);
+CHECK_EQ(view.get("color", 17), std::optional<std::string>("green"));
+CHECK_EQ(view.get("color", 20), std::optional<std::string>("blue"));
+tm.set("color", "black", 20);
+CHECK_EQ(view.get("color", 25), std::optional<std::string>("black"));
+TimeMap big;
+for (int t = 0; t < 2'000'000; t += 2) big.set("k", std::to_string(t), t);
+CHECK_EQ(big.get("k", 1'500'001), std::optional<std::string>("1500000"));
+int hits = 0, queries = 0;
+for (int t = 1; t < 2'000'000; t += 7, ++queries)
+    hits += big.get("k", t) == std::optional<std::string>(std::to_string(t - t % 2));
+CHECK_EQ(hits, queries);
+'''
+java = '''
+TimeMap tm = new TimeMap();
+tm.set("color", "red", 10);
+tm.set("color", "blue", 20);
+check("before any version", tm.get("color", 5), null);
+check("exact timestamp", tm.get("color", 10), "red");
+check("between two versions", tm.get("color", 15), "red");
+check("after the last version", tm.get("color", 99), "blue");
+check("unknown key", tm.get("size", 99), null);
+tm.set("color", "green", 15);
+check("out-of-order insertion", tm.get("color", 17), "green");
+check("later version unaffected", tm.get("color", 20), "blue");
+tm.set("color", "black", 20);
+check("replacing a version", tm.get("color", 25), "black");
+TimeMap big = new TimeMap();
+for (int t = 0; t < 2_000_000; t += 2) big.set("k", String.valueOf(t), t);
+check("many versions", big.get("k", 1_500_001), "1500000");
+int hits = 0, queries = 0;
+for (int t = 1; t < 2_000_000; t += 7, queries++)
+    if (String.valueOf(t - t % 2).equals(big.get("k", t))) hits++;
+check("many lookups", hits, queries);
+'''
+
+[solutions]
+python = '''
+from bisect import bisect_right
+from collections import defaultdict
+
+
+class TimeMap:
+    def __init__(self):
+        self.times = defaultdict(list)  # key -> sorted timestamps
+        self.values = defaultdict(list)  # key -> values, aligned with times
+
+    def set(self, key: str, value: str, timestamp: int) -> None:
+        times, values = self.times[key], self.values[key]
+        i = bisect_right(times, timestamp)
+        if i and times[i - 1] == timestamp:
+            values[i - 1] = value
+        else:
+            times.insert(i, timestamp)
+            values.insert(i, value)
+
+    def get(self, key: str, timestamp: int) -> str | None:
+        i = bisect_right(self.times.get(key, []), timestamp)
+        return self.values[key][i - 1] if i else None
+'''
+cpp = '''
+#include <bits/stdc++.h>
+
+class TimeMap {
+public:
+    void set(const std::string& key, std::string value, int timestamp) {
+        history_[key][timestamp] = std::move(value);
+    }
+
+    std::optional<std::string> get(const std::string& key, int timestamp) const {
+        auto found = history_.find(key);  // operator[] is not const: it may insert
+        if (found == history_.end()) return std::nullopt;
+        auto it = found->second.upper_bound(timestamp);  // first version after timestamp
+        if (it == found->second.begin()) return std::nullopt;
+        return std::prev(it)->second;
+    }
+
+private:
+    std::unordered_map<std::string, std::map<int, std::string>> history_;
+};
+'''
+java = '''
+import java.util.*;
+
+class TimeMap {
+    private final Map<String, TreeMap<Integer, String>> history = new HashMap<>();
+
+    void set(String key, String value, int timestamp) {
+        history.computeIfAbsent(key, k -> new TreeMap<>()).put(timestamp, value);
+    }
+
+    String get(String key, int timestamp) {
+        TreeMap<Integer, String> versions = history.get(key);
+        if (versions == null) return null;
+        Map.Entry<Integer, String> entry = versions.floorEntry(timestamp);
+        return entry == null ? null : entry.getValue();
+    }
+}
+'''

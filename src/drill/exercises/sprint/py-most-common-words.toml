@@ -1,0 +1,37 @@
+title = "Most common words"
+kind = "code"
+tags = ["python", "idiom", "counter", "regex"]
+target = 90
+statement = """
+top_words(text, n) returns the n most frequent words as (word, count) tuples,
+most frequent first; equally frequent words keep their order of first
+appearance. Words are runs of lowercase letters and apostrophes, after
+lowercasing the text.
+"""
+hint = "collections.Counter(re.findall(...)).most_common(n): Counter remembers insertion order."
+
+[starter]
+python = '''
+def top_words(text: str, n: int) -> list[tuple[str, int]]:
+    pass
+'''
+
+[checks]
+python = '''
+text = "the cat and the hat. The cat sat!"
+check("top 2", top_words(text, 2), [("the", 3), ("cat", 2)])
+check("ties keep first appearance", top_words("b a b a c", 3), [("b", 2), ("a", 2), ("c", 1)])
+check("n larger than the vocabulary", top_words("x", 5), [("x", 1)])
+check("apostrophes", top_words("don't stop, don't", 1), [("don't", 2)])
+check("empty", top_words("", 3), [])
+'''
+
+[solutions]
+python = '''
+import re
+from collections import Counter
+
+
+def top_words(text: str, n: int) -> list[tuple[str, int]]:
+    return Counter(re.findall(r"[a-z']+", text.lower())).most_common(n)
+'''

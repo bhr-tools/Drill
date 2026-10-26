@@ -1,0 +1,39 @@
+title = "Invert a dictionary"
+kind = "code"
+tags = ["python", "idiom", "dict"]
+target = 90
+statement = """
+invert(mapping) returns a new dict mapping each value of mapping to the list of
+keys that had it, keys sorted. The input is left untouched.
+"""
+hint = "collections.defaultdict(list), filled while iterating over sorted(mapping.items())."
+
+[starter]
+python = '''
+def invert(mapping: dict) -> dict:
+    pass
+'''
+
+[checks]
+python = '''
+check("one key per value", invert({"a": 1, "b": 2}), {1: ["a"], 2: ["b"]})
+check("shared values", invert({"a": 1, "b": 1, "c": 2}), {1: ["a", "b"], 2: ["c"]})
+check("keys sorted", invert({"z": 0, "y": 0, "x": 0}), {0: ["x", "y", "z"]})
+check("empty", invert({}), {})
+original = {"k": "v"}
+invert(original)
+check("input untouched", original, {"k": "v"})
+check("a plain dict, not a defaultdict", type(invert({"a": 1})), dict)
+'''
+
+[solutions]
+python = '''
+from collections import defaultdict
+
+
+def invert(mapping: dict) -> dict:
+    inverted = defaultdict(list)
+    for key, value in sorted(mapping.items()):
+        inverted[value].append(key)
+    return dict(inverted)
+'''

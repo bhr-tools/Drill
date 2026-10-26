@@ -1,0 +1,44 @@
+title = "Run-length encoding"
+kind = "code"
+tags = ["java", "idiom", "string"]
+target = 120
+statement = """
+Text.compress(s) replaces each run of a repeated character with the character
+followed by the run length, the length being omitted for runs of one:
+"aaabcc" -> "a3bc2". Build the result with a StringBuilder.
+"""
+hint = "Find where each run ends with a second index, then append the char and (if > 1) the length."
+
+[starter]
+java = '''
+class Text {
+    static String compress(String s) {
+    }
+}
+'''
+
+[checks]
+java = '''
+check("runs", Text.compress("aaabcc"), "a3bc2");
+check("no runs", Text.compress("abc"), "abc");
+check("empty", Text.compress(""), "");
+check("two-digit run", Text.compress("zzzzzzzzzzzz"), "z12");
+check("same letter apart", Text.compress("aabaa"), "a2ba2");
+'''
+
+[solutions]
+java = '''
+class Text {
+    static String compress(String s) {
+        StringBuilder out = new StringBuilder();
+        for (int i = 0; i < s.length();) {
+            int j = i;
+            while (j < s.length() && s.charAt(j) == s.charAt(i)) j++;
+            out.append(s.charAt(i));
+            if (j - i > 1) out.append(j - i);
+            i = j;
+        }
+        return out.toString();
+    }
+}
+'''

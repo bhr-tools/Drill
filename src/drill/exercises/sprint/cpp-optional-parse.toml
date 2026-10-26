@@ -1,0 +1,54 @@
+title = "Optional results"
+kind = "code"
+tags = ["cpp", "idiom", "optional", "parsing"]
+target = 120
+statement = """
+find_index(v, target): the index of the first occurrence, or std::nullopt.
+parse_int(s): the int written in s (digits with an optional leading '-'), or
+std::nullopt if s is not exactly a valid int: empty, trailing characters,
+out of range…
+"""
+hint = "std::ranges::find, and std::from_chars: check both its error code and that it consumed everything."
+
+[starter]
+cpp = '''
+#include <bits/stdc++.h>
+
+std::optional<std::size_t> find_index(const std::vector<int>& v, int target) {
+}
+
+std::optional<int> parse_int(std::string_view s) {
+}
+'''
+
+[checks]
+cpp = '''
+CHECK_EQ(find_index({4, 5, 6, 5}, 5), std::optional<std::size_t>(1));
+CHECK(!find_index({}, 1));
+CHECK(!find_index({1, 2}, 3));
+CHECK_EQ(find_index({0}, 0), std::optional<std::size_t>(0));
+CHECK_EQ(parse_int("42"), std::optional<int>(42));
+CHECK_EQ(parse_int("-7"), std::optional<int>(-7));
+CHECK(!parse_int(""));
+CHECK(!parse_int("12a"));
+CHECK(!parse_int(" 1"));
+CHECK(!parse_int("99999999999"));
+'''
+
+[solutions]
+cpp = '''
+#include <bits/stdc++.h>
+
+std::optional<std::size_t> find_index(const std::vector<int>& v, int target) {
+    auto it = std::ranges::find(v, target);
+    if (it == v.end()) return std::nullopt;
+    return static_cast<std::size_t>(it - v.begin());
+}
+
+std::optional<int> parse_int(std::string_view s) {
+    int value;
+    auto [end, error] = std::from_chars(s.data(), s.data() + s.size(), value);
+    if (error != std::errc{} || end != s.data() + s.size()) return std::nullopt;
+    return value;
+}
+'''

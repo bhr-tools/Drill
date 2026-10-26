@@ -1,0 +1,191 @@
+title = "Packaging with mkDerivation"
+kind = "code"
+file = "package.nix"
+tags = ["nix", "derivations", "packaging", "callpackage"]
+target = 360
+statement = """
+Package the C program in src/ (one file, greet.c, no build system) in
+package.nix, a function for callPackage:
+- pname "greet", version "1.0", src the src folder;
+- build it with $CC into an executable greet, install it as $out/bin/greet;
+- meta: a description, and mainProgram = "greet".
+Try it: nix-build -E 'with import <nixpkgs> { }; callPackage ./package.nix { }'
+"""
+hint = "buildPhase = ''$CC greet.c -o greet''; installPhase = ''install -Dm755 greet $out/bin/greet'';"
+explanation = """
+stdenv.mkDerivation runs phases: unpack (copies src), patch, configure, build,
+check, install, fixup. Without a Makefile or a configure script, the default
+build and install phases have nothing to do, so you write them. $CC is the
+compiler wrapper stdenv provides, $out the store path the result must go to.
+
+package.nix takes its dependencies as arguments ({ stdenv }) instead of
+importing nixpkgs: callPackage fills them in from the package set, which is how
+every package in nixpkgs is written, and what makes .override possible.
+"""
+
+[files]
+"src/greet.c" = """
+#include <stdio.h>
+
+int main(int argc, char **argv) {
+    printf("Hello, %s!\\n", argc > 1 ? argv[1] : "world");
+    return 0;
+}
+"""
+
+[starter]
+nix = '''
+{ stdenv }:
+
+stdenv.mkDerivation {
+}
+'''
+
+[setup]
+nix = '''
+greet = pkgs.callPackage file { };
+'''
+
+[checks]
+nix = '''
+(check "pname" (greet.pname or null) "greet")
+(check "version" (greet.version or null) "1.0")
+(check "meta.mainProgram" (greet.meta.mainProgram or null) "greet")
+(check "meta.description is set" (builtins.isString (greet.meta.description or null)) true)
+(check "it builds and greets" (sh "${lib.getExe greet} drill") "Hello, drill!\n")
+(check "without arguments" (sh "${greet}/bin/greet") "Hello, world!\n")
+'''
+
+[solutions]
+nix = '''
+{ stdenv }:
+
+stdenv.mkDerivation {
+  pname = "greet";
+  version = "1.0";
+  src = ./src;
+
+  buildPhase = ''
+    $CC greet.c -o greet
+  '';
+
+  installPhase = ''
+    install -Dm755 greet $out/bin/greet
+  '';
+
+  meta = {
+    description = "Greets whoever is named on its command line";
+    mainProgram = "greet";
+  };
+}
+'''
+
+[[variants]]
+statement = """
+Package the project in src/ in package.nix, a function for callPackage. Its
+Makefile builds hello-make and installs it under $(PREFIX)/bin, PREFIX being
+/usr/local by default: pass it the right PREFIX instead of writing any phase.
+- pname "hello-make", version "0.3", src the src folder;
+- meta.mainProgram = "hello-make".
+Try it: nix-build -E 'with import <nixpkgs> { }; callPackage ./package.nix { }'
+"""
+hint = "makeFlags = [ \"PREFIX=$(out)\" ]: make, then make install, are stdenv's default phases."
+explanation = """
+With a Makefile, stdenv's default build phase runs make and its install phase
+runs make install, both with makeFlags. Setting PREFIX to $(out) (a Make
+variable that stdenv defines as the output path) is all it takes: no phase to
+write. installFlags would apply to make install alone.
+"""
+[variants.files]
+"src/Makefile" = """
+PREFIX ?= /usr/local
+
+hello-make: hello.c
+\t$(CC) -O2 -o hello-make hello.c
+
+install: hello-make
+\tinstall -Dm755 hello-make $(PREFIX)/bin/hello-make
+"""
+"src/hello.c" = """
+#include <stdio.h>
+
+int main(void) {
+    puts("built by make");
+    return 0;
+}
+"""
+[variants.setup]
+nix = '''
+greet = pkgs.callPackage file { };
+'''
+[variants.checks]
+nix = '''
+(check "pname" (greet.pname or null) "hello-make")
+(check "version" (greet.version or null) "0.3")
+(check "no custom phase" (greet ? buildPhase || greet ? installPhase) false)
+(check "it builds and runs" (sh (lib.getExe greet)) "built by make\n")
+'''
+[variants.solutions]
+nix = '''
+{ stdenv }:
+
+stdenv.mkDerivation {
+  pname = "hello-make";
+  version = "0.3";
+  src = ./src;
+
+  makeFlags = [ "PREFIX=$(out)" ];
+
+  meta.mainProgram = "hello-make";
+}
+'''
+
+[[variants]]
+statement = """
+Package the shell script count-keys in package.nix, a function for callPackage,
+with writeShellApplication: it prints how many keys the JSON object in the file
+given as its argument has, with jq 'keys | length'. jq must come from its
+runtimeInputs, not from the PATH of whoever runs it.
+data/sample.json is there to try it on.
+"""
+hint = "{ writeShellApplication, jq }: writeShellApplication { name = …; runtimeInputs = [ jq ]; text = '' … ''; }"
+explanation = """
+writeShellApplication writes a bash script with set -euo pipefail, prepends the
+bin folders of runtimeInputs to PATH, and runs shellcheck on it at build time: an
+unquoted "$1" fails the build. A script packaged this way works on any machine,
+whatever is installed there.
+"""
+[variants.files]
+"data/sample.json" = """
+{ "name": "drill", "version": 1, "tags": ["nix"] }
+"""
+[variants.starter]
+nix = '''
+{ writeShellApplication }:
+
+writeShellApplication {
+}
+'''
+[variants.setup]
+nix = '''
+app = pkgs.callPackage file { };
+'''
+[variants.checks]
+nix = '''
+(check "name" (app.name or null) "count-keys")
+(check "jq comes from its runtimeInputs" (contains "${lib.getBin pkgs.jq}/bin" (app.text or "")) true)
+(check "it counts the keys" (sh "PATH=/nowhere ${app}/bin/count-keys ${dir + "/data/sample.json"}") "3\n")
+(check "on an empty object" (sh "echo '{}' > o.json; PATH=/nowhere ${app}/bin/count-keys o.json") "0\n")
+'''
+[variants.solutions]
+nix = '''
+{ writeShellApplication, jq }:
+
+writeShellApplication {
+  name = "count-keys";
+  runtimeInputs = [ jq ];
+  text = ''
+    jq 'keys | length' "$1"
+  '';
+}
+'''

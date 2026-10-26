@@ -1,0 +1,138 @@
+title = "A polymorphic binary search tree"
+kind = "code"
+tags = ["ocaml", "idiom", "trees", "recursion", "polymorphism"]
+target = 420
+statement = """
+type 'a tree = Leaf | Node of 'a tree * 'a * 'a tree, a binary search tree
+ordered by the polymorphic compare.
+
+- insert x t: t with x added (unchanged if x is already there).
+- mem x t: whether x is in t, visiting a single branch.
+- to_list t: the elements in increasing order, in linear time (an accumulator:
+  no @ on every node).
+- height t: Leaf is 0.
+- fold f t acc: f applied to the elements in increasing order, like List.fold_left.
+"""
+hint = "to_list: let rec go t acc = match t with Leaf -> acc | Node (l, x, r) -> go l (x :: go r acc)"
+
+[starter]
+ocaml = '''
+type 'a tree = Leaf | Node of 'a tree * 'a * 'a tree
+
+let rec insert (x : 'a) (t : 'a tree) : 'a tree = failwith "todo"
+
+let rec mem (x : 'a) (t : 'a tree) : bool = failwith "todo"
+
+let to_list (t : 'a tree) : 'a list = failwith "todo"
+
+let rec height (t : 'a tree) : int = failwith "todo"
+
+let rec fold (f : 'acc -> 'a -> 'acc) (t : 'a tree) (acc : 'acc) : 'acc = failwith "todo"
+'''
+
+[checks]
+ocaml = '''
+let t = List.fold_left (fun t x -> insert x t) Leaf [ 5; 3; 8; 1; 4; 5; 9 ] in
+check_eq ~show:Show.(list int) "to_list" (to_list t) [ 1; 3; 4; 5; 8; 9 ];
+check "mem 4" (mem 4 t);
+check "not mem 7" (not (mem 7 t));
+check_eq ~show:Show.int "height" (height t) 3;
+check_eq ~show:Show.int "height leaf" (height Leaf) 0;
+check_eq ~show:Show.int "fold sum" (fold ( + ) t 0) 30;
+check_eq ~show:Show.(list int) "fold order" (List.rev (fold (fun acc x -> x :: acc) t [])) [ 1; 3; 4; 5; 8; 9 ];
+let words = List.fold_left (fun t x -> insert x t) Leaf [ "pear"; "apple"; "fig" ] in
+check_eq ~show:Show.(list string) "polymorphic" (to_list words) [ "apple"; "fig"; "pear" ];
+let big = List.fold_left (fun t x -> insert x t) Leaf (List.init 20000 (fun i -> (i * 7919) mod 20000)) in
+check_eq ~show:Show.int "to_list is linear" (List.length (to_list big)) 20000;
+'''
+
+[solutions]
+ocaml = '''
+type 'a tree = Leaf | Node of 'a tree * 'a * 'a tree
+
+let rec insert x = function
+  | Leaf -> Node (Leaf, x, Leaf)
+  | Node (l, y, r) as t ->
+      let c = compare x y in
+      if c < 0 then Node (insert x l, y, r) else if c > 0 then Node (l, y, insert x r) else t
+
+let rec mem x = function
+  | Leaf -> false
+  | Node (l, y, r) ->
+      let c = compare x y in
+      c = 0 || if c < 0 then mem x l else mem x r
+
+let to_list t =
+  let rec go t acc = match t with Leaf -> acc | Node (l, x, r) -> go l (x :: go r acc) in
+  go t []
+
+let rec height = function Leaf -> 0 | Node (l, _, r) -> 1 + max (height l) (height r)
+
+let rec fold f t acc =
+  match t with Leaf -> acc | Node (l, x, r) -> fold f r (f (fold f l acc) x)
+'''
+
+[[variants]]
+title = "Transforming a binary tree"
+statement = """
+type 'a tree = Leaf | Node of 'a tree * 'a * 'a tree (any binary tree, not a search tree).
+
+- map f t: the same shape with f applied to every element.
+- mirror t: left and right swapped at every level.
+- size t: the number of nodes.
+- leaves t: the elements of the nodes whose two children are Leaf, left to right.
+- of_list xs: a balanced tree whose in-order traversal is xs (the middle element
+  at the root, len / 2).
+"""
+hint = "of_list: split at List.length xs / 2, recurse on both halves."
+[variants.starter]
+ocaml = '''
+type 'a tree = Leaf | Node of 'a tree * 'a * 'a tree
+
+let rec map (f : 'a -> 'b) (t : 'a tree) : 'b tree = failwith "todo"
+
+let rec mirror (t : 'a tree) : 'a tree = failwith "todo"
+
+let rec size (t : 'a tree) : int = failwith "todo"
+
+let rec leaves (t : 'a tree) : 'a list = failwith "todo"
+
+let rec of_list (xs : 'a list) : 'a tree = failwith "todo"
+'''
+[variants.checks]
+ocaml = '''
+let t = Node (Node (Leaf, 1, Leaf), 2, Node (Node (Leaf, 3, Leaf), 4, Leaf)) in
+check "map" (map string_of_int t = Node (Node (Leaf, "1", Leaf), "2", Node (Node (Leaf, "3", Leaf), "4", Leaf)));
+check "mirror" (mirror t = Node (Node (Leaf, 4, Node (Leaf, 3, Leaf)), 2, Node (Leaf, 1, Leaf)));
+check "mirror twice" (mirror (mirror t) = t);
+check_eq ~show:Show.int "size" (size t) 4;
+check_eq ~show:Show.(list int) "leaves" (leaves t) [ 1; 3 ];
+check_eq ~show:Show.(list int) "no leaves" (leaves Leaf) [];
+check "of_list" (of_list [ 1; 2; 3 ] = Node (Node (Leaf, 1, Leaf), 2, Node (Leaf, 3, Leaf)));
+check "of_list empty" (of_list [] = Leaf);
+check_eq ~show:Show.int "of_list size" (size (of_list (List.init 100 Fun.id))) 100;
+'''
+[variants.solutions]
+ocaml = '''
+type 'a tree = Leaf | Node of 'a tree * 'a * 'a tree
+
+let rec map f = function Leaf -> Leaf | Node (l, x, r) -> Node (map f l, f x, map f r)
+
+let rec mirror = function Leaf -> Leaf | Node (l, x, r) -> Node (mirror r, x, mirror l)
+
+let rec size = function Leaf -> 0 | Node (l, _, r) -> size l + 1 + size r
+
+let rec leaves = function
+  | Leaf -> []
+  | Node (Leaf, x, Leaf) -> [ x ]
+  | Node (l, _, r) -> leaves l @ leaves r
+
+let rec of_list = function
+  | [] -> Leaf
+  | xs ->
+      let half = List.length xs / 2 in
+      let left = List.filteri (fun i _ -> i < half) xs in
+      match List.filteri (fun i _ -> i >= half) xs with
+      | x :: right -> Node (of_list left, x, of_list right)
+      | [] -> assert false
+'''

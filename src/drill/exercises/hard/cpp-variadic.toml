@@ -1,0 +1,79 @@
+title = "Variadic templates and folds"
+kind = "code"
+tags = ["cpp", "templates", "variadic", "constexpr", "variant"]
+target = 900
+statement = """
+- sum(xs...): the sum of any number of arguments, usable at compile time,
+  with sum() == 0;
+- join(sep, xs...): every argument written with operator<<, separated by sep;
+- all_same_v<T, Ts...>: a constexpr bool, true when every type is T;
+- overloaded{lambdas...}: a single callable combining the call operators of
+  several lambdas, for std::visit.
+"""
+hint = "Fold expressions: (xs + ... + 0), and a comma fold for join; template <class... Fs> struct overloaded : Fs... { using Fs::operator()...; };"
+
+[starter]
+cpp = '''
+#include <bits/stdc++.h>
+
+template <class... Ts>
+constexpr auto sum(Ts... xs) {
+}
+
+template <class... Ts>
+std::string join(std::string_view sep, const Ts&... xs) {
+}
+
+// all_same_v and overloaded go here
+'''
+
+[checks]
+cpp = '''
+static_assert(sum(1, 2, 3) == 6, "sum must be constexpr");
+CHECK_EQ(sum(1, 2, 3), 6);
+CHECK_EQ(sum(), 0);
+CHECK_EQ(sum(1, 2.5), 3.5);
+CHECK_EQ(join(", ", 1, "two", 3.5, 'c'), std::string("1, two, 3.5, c"));
+CHECK_EQ(join("-"), std::string(""));
+CHECK_EQ(join("", "solo"), std::string("solo"));
+CHECK(all_same_v<int, int, int>);
+CHECK(!all_same_v<int, long>);
+CHECK(all_same_v<int>);
+auto describe = [](const std::variant<int, std::string, double>& value) {
+    return std::visit(overloaded{
+        [](int i) { return "int " + std::to_string(i); },
+        [](const std::string& s) { return "string " + s; },
+        [](double) { return std::string("double"); },
+    }, value);
+};
+CHECK_EQ(describe(std::string("hi")), std::string("string hi"));
+CHECK_EQ(describe(42), std::string("int 42"));
+CHECK_EQ(describe(1.5), std::string("double"));
+'''
+
+[solutions]
+cpp = '''
+#include <bits/stdc++.h>
+
+template <class... Ts>
+constexpr auto sum(Ts... xs) {
+    return (xs + ... + 0);
+}
+
+template <class... Ts>
+std::string join(std::string_view sep, const Ts&... xs) {
+    std::ostringstream out;
+    bool first = true;
+    // A comma fold runs the expression once per argument, in order
+    ((out << (first ? "" : sep) << xs, first = false), ...);
+    return out.str();
+}
+
+template <class T, class... Ts>
+constexpr bool all_same_v = (std::is_same_v<T, Ts> && ...);
+
+template <class... Fs>
+struct overloaded : Fs... {
+    using Fs::operator()...;
+};
+'''

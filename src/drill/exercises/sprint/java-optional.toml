@@ -1,0 +1,48 @@
+title = "Optional chains"
+kind = "code"
+tags = ["java", "idiom", "optional", "streams"]
+target = 75
+statement = """
+In class Words:
+- longest(words): the longest word, the first one on ties, or an empty Optional;
+- describe(word): "longest: <word>", or "none" when empty — without isPresent().
+"""
+hint = "stream().max(Comparator.comparingInt(String::length)) keeps the first maximum; Optional.map(...).orElse(...)."
+
+[starter]
+java = '''
+import java.util.*;
+
+class Words {
+    static Optional<String> longest(List<String> words) {
+    }
+
+    static String describe(Optional<String> word) {
+    }
+}
+'''
+
+[checks]
+java = '''
+check("longest", Words.longest(List.of("a", "abc", "ab")), Optional.of("abc"));
+check("first one on ties", Words.longest(List.of("xy", "ab")), Optional.of("xy"));
+check("empty", Words.longest(List.of()), Optional.empty());
+check("describe", Words.describe(Optional.of("kiwi")), "longest: kiwi");
+check("describe empty", Words.describe(Optional.empty()), "none");
+'''
+
+[solutions]
+java = '''
+import java.util.*;
+
+class Words {
+    static Optional<String> longest(List<String> words) {
+        // max keeps the first of equal elements
+        return words.stream().max(Comparator.comparingInt(String::length));
+    }
+
+    static String describe(Optional<String> word) {
+        return word.map(w -> "longest: " + w).orElse("none");
+    }
+}
+'''

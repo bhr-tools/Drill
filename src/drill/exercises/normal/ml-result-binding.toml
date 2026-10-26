@@ -1,0 +1,133 @@
+title = "Result and let*"
+kind = "code"
+tags = ["ocaml", "idiom", "result", "error-handling"]
+target = 360
+statement = """
+Validate a user given as text fields, stopping at the first error, with the
+binding operator let* over Result (define it: let ( let* ) = Result.bind).
+
+type user = { name : string; age : int; email : string }
+
+validate ~name ~age ~email checks, in this order:
+- name, trimmed, is not empty, else Error "empty name";
+- age parses as an integer, else Error "age is not a number", and is in 0..150,
+  else Error "age out of range";
+- email contains exactly one '@' with text on both sides, else Error "invalid email".
+It returns Ok { name = trimmed name; age; email }.
+"""
+hint = "let* name = if … then Error \"empty name\" else Ok trimmed in let* age = … in Ok { name; age; email }"
+explanation = """
+Result.bind chains computations that can fail: the next step runs only on Ok,
+and the first Error short-circuits the rest. The binding operator let* (OCaml
+4.08) writes that chain as if it were plain let bindings, without nested matches:
+the same idea as Rust's ? operator or Haskell's do notation.
+"""
+
+[starter]
+ocaml = '''
+type user = { name : string; age : int; email : string }
+
+let validate ~(name : string) ~(age : string) ~(email : string) : (user, string) result =
+  failwith "todo"
+'''
+
+[checks]
+ocaml = '''
+let show = Show.result (fun u -> Printf.sprintf "{%s, %d, %s}" u.name u.age u.email) Show.string in
+check_eq ~show "valid" (validate ~name:" Ada " ~age:"36" ~email:"ada@calc.org") (Ok { name = "Ada"; age = 36; email = "ada@calc.org" });
+check_eq ~show "empty name" (validate ~name:"  " ~age:"x" ~email:"") (Error "empty name");
+check_eq ~show "age text" (validate ~name:"Bo" ~age:"old" ~email:"b@b") (Error "age is not a number");
+check_eq ~show "age range" (validate ~name:"Bo" ~age:"200" ~email:"b@b") (Error "age out of range");
+check_eq ~show "negative age" (validate ~name:"Bo" ~age:"-1" ~email:"b@b") (Error "age out of range");
+check_eq ~show "no at" (validate ~name:"Bo" ~age:"20" ~email:"bob") (Error "invalid email");
+check_eq ~show "two ats" (validate ~name:"Bo" ~age:"20" ~email:"a@b@c") (Error "invalid email");
+check_eq ~show "empty side" (validate ~name:"Bo" ~age:"20" ~email:"@b") (Error "invalid email");
+'''
+
+[solutions]
+ocaml = '''
+type user = { name : string; age : int; email : string }
+
+let ( let* ) = Result.bind
+
+let validate ~name ~age ~email =
+  let* name =
+    match String.trim name with "" -> Error "empty name" | name -> Ok name
+  in
+  let* age = Option.to_result ~none:"age is not a number" (int_of_string_opt age) in
+  let* age = if age < 0 || age > 150 then Error "age out of range" else Ok age in
+  let* () =
+    match String.split_on_char '@' email with
+    | [ user; domain ] when user <> "" && domain <> "" -> Ok ()
+    | _ -> Error "invalid email"
+  in
+  Ok { name; age; email }
+'''
+
+[[variants]]
+title = "Parsing a config with Result and let*"
+statement = """
+Parse "key=value" lines into a config, stopping at the first error, with
+let* over Result (let ( let* ) = Result.bind).
+
+type config = { host : string; port : int; debug : bool }
+
+parse lines: blank lines and lines starting with '#' are skipped; any other
+line without '=' gives Error "line N: expected key=value" (N counts from 1,
+over every line). Keys and values are trimmed. host is required
+(Error "missing host"); port defaults to 80 and must parse as an int
+(Error "line N: bad port"); debug defaults to false and is "true" or "false"
+(Error "line N: bad debug"). Unknown keys give Error "line N: unknown key K".
+"""
+hint = "Fold over List.mapi'd lines with a Result accumulator: let* cfg = acc in …"
+[variants.starter]
+ocaml = '''
+type config = { host : string; port : int; debug : bool }
+
+let parse (lines : string list) : (config, string) result = failwith "todo"
+'''
+[variants.checks]
+ocaml = '''
+let show = Show.result (fun c -> Printf.sprintf "{%s, %d, %b}" c.host c.port c.debug) Show.string in
+check_eq ~show "full" (parse [ "# server"; "host = example.org"; ""; "port=8080"; "debug = true" ]) (Ok { host = "example.org"; port = 8080; debug = true });
+check_eq ~show "defaults" (parse [ "host=a" ]) (Ok { host = "a"; port = 80; debug = false });
+check_eq ~show "missing host" (parse [ "port=1" ]) (Error "missing host");
+check_eq ~show "no equals" (parse [ "host=a"; "oops" ]) (Error "line 2: expected key=value");
+check_eq ~show "bad port" (parse [ ""; "port=http"; "host=a" ]) (Error "line 2: bad port");
+check_eq ~show "bad debug" (parse [ "debug=yes" ]) (Error "line 1: bad debug");
+check_eq ~show "unknown key" (parse [ "host=a"; "user=root" ]) (Error "line 2: unknown key user");
+check_eq ~show "first error wins" (parse [ "x=1"; "port=no" ]) (Error "line 1: unknown key x");
+'''
+[variants.solutions]
+ocaml = '''
+type config = { host : string; port : int; debug : bool }
+
+let ( let* ) = Result.bind
+
+let parse lines =
+  let step acc (n, line) =
+    let* (host, cfg) = acc in
+    let line = String.trim line in
+    if line = "" || line.[0] = '#' then Ok (host, cfg)
+    else
+      match String.index_opt line '=' with
+      | None -> Error (Printf.sprintf "line %d: expected key=value" n)
+      | Some i -> (
+          let key = String.trim (String.sub line 0 i) in
+          let value = String.trim (String.sub line (i + 1) (String.length line - i - 1)) in
+          match key with
+          | "host" -> Ok (Some value, cfg)
+          | "port" -> (
+              match int_of_string_opt value with
+              | Some port -> Ok (host, { cfg with port })
+              | None -> Error (Printf.sprintf "line %d: bad port" n))
+          | "debug" -> (
+              match bool_of_string_opt value with
+              | Some debug -> Ok (host, { cfg with debug })
+              | None -> Error (Printf.sprintf "line %d: bad debug" n))
+          | key -> Error (Printf.sprintf "line %d: unknown key %s" n key))
+  in
+  let numbered = List.mapi (fun i line -> (i + 1, line)) lines in
+  let* host, cfg = List.fold_left step (Ok (None, { host = ""; port = 80; debug = false })) numbered in
+  match host with None -> Error "missing host" | Some host -> Ok { cfg with host }
+'''

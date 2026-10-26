@@ -1,0 +1,55 @@
+title = "Sort pairs with a comparator"
+kind = "code"
+tags = ["cpp", "idiom", "sorting", "ranges"]
+target = 90
+statement = """
+sort_scores(scores) sorts (name, score) pairs by score, highest first, then by
+name in ascending order. top_names(scores, k) returns the first k names of an
+already sorted list (all of them if there are fewer than k).
+"""
+hint = "A lambda comparing std::tie(b.second, a.first) < std::tie(a.second, b.first); std::views::take for the top k."
+
+[starter]
+cpp = '''
+#include <bits/stdc++.h>
+
+using Scores = std::vector<std::pair<std::string, int>>;
+
+void sort_scores(Scores& scores) {
+}
+
+std::vector<std::string> top_names(const Scores& scores, std::size_t k) {
+}
+'''
+
+[checks]
+cpp = '''
+Scores scores{{"bob", 7}, {"ann", 9}, {"cid", 7}, {"dan", 3}};
+sort_scores(scores);
+CHECK_EQ(scores, Scores{{"ann", 9}, {"bob", 7}, {"cid", 7}, {"dan", 3}});
+CHECK_EQ(top_names(scores, 2), std::vector<std::string>{"ann", "bob"});
+CHECK_EQ(top_names(scores, 10).size(), std::size_t{4});
+Scores empty;
+sort_scores(empty);
+CHECK(top_names(empty, 3).empty());
+'''
+
+[solutions]
+cpp = '''
+#include <bits/stdc++.h>
+
+using Scores = std::vector<std::pair<std::string, int>>;
+
+void sort_scores(Scores& scores) {
+    std::ranges::sort(scores, [](const auto& a, const auto& b) {
+        // Swapping a and b on the score only: descending score, ascending name
+        return std::tie(b.second, a.first) < std::tie(a.second, b.first);
+    });
+}
+
+std::vector<std::string> top_names(const Scores& scores, std::size_t k) {
+    std::vector<std::string> names;
+    for (const auto& [name, score] : scores | std::views::take(k)) names.push_back(name);
+    return names;
+}
+'''

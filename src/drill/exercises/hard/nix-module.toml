@@ -1,0 +1,194 @@
+title = "Writing a NixOS module"
+kind = "code"
+file = "module.nix"
+tags = ["nix", "nixos", "modules", "options", "systemd"]
+target = 900
+statement = """
+Write module.nix, a NixOS module for a service greeter:
+- options.services.greeter:
+  - enable: mkEnableOption;
+  - message: a string, default "Hello";
+  - port: a port (types.port), default 8000;
+  - openFirewall: a bool, default false.
+- config, only when enabled (mkIf):
+  - systemd.services.greeter, wanted by multi-user.target, with
+    environment.GREETING = the message, and serviceConfig: DynamicUser = true and
+    ExecStart = "${pkgs.python3}/bin/python3 -m http.server <port>";
+  - the port open in the firewall when openFirewall is true.
+"""
+hint = "{ config, lib, pkgs, ... }: let cfg = config.services.greeter; in { options.services.greeter = { … }; config = lib.mkIf cfg.enable { … }; }"
+explanation = """
+A NixOS module declares options (their type, default and documentation) and
+defines config values, usually guarded by mkIf cfg.enable so that importing the
+module changes nothing until it is enabled. mkIf is lazy: its condition can
+depend on config without causing an infinite recursion, where an `if` around
+the whole config would.
+
+Types check and merge definitions: types.port rejects "x" with an error that
+names the file, and the firewall's allowedTCPPorts is a list, so your
+definition is concatenated with every other module's. lib.optional
+cfg.openFirewall cfg.port gives [ ] or [ port ].
+"""
+
+[starter]
+nix = '''
+{ config, lib, pkgs, ... }:
+
+let
+  cfg = config.services.greeter;
+in
+{
+  options.services.greeter = {
+  };
+
+  config = {
+  };
+}
+'''
+
+[setup]
+nix = '''
+on = (nixos [ file { services.greeter = { enable = true; message = "Bonjour"; port = 9000; openFirewall = true; }; } ]).config;
+closed = (nixos [ file { services.greeter.enable = true; } ]).config;
+off = nixos [ file ];
+service = on.systemd.services.greeter or { };
+'''
+
+[checks]
+nix = '''
+(check "enable is a mkEnableOption" (off.options.services.greeter.enable.type.name or null) "bool")
+(check "message defaults to Hello" off.config.services.greeter.message "Hello")
+(check "port defaults to 8000" off.config.services.greeter.port 8000)
+(check "disabled: no service" (off.config.systemd.services ? greeter) false)
+(check "enabled: the service" (on.systemd.services ? greeter) true)
+(check "wanted by multi-user.target" (builtins.elem "multi-user.target" (service.wantedBy or [ ])) true)
+(check "GREETING" (service.environment.GREETING or null) "Bonjour")
+(check "DynamicUser" (service.serviceConfig.DynamicUser or null) true)
+(check "ExecStart serves on the port" (contains "/bin/python3 -m http.server 9000" (service.serviceConfig.ExecStart or "")) true)
+(check "openFirewall opens the port" (builtins.elem 9000 on.networking.firewall.allowedTCPPorts) true)
+(check "closed by default" (builtins.elem 8000 closed.networking.firewall.allowedTCPPorts) false)
+(checkThrows "the port is type-checked" (nixos [ file { services.greeter.port = "x"; } ]).config.services.greeter.port)
+'''
+
+[solutions]
+nix = '''
+{ config, lib, pkgs, ... }:
+
+let
+  cfg = config.services.greeter;
+in
+{
+  options.services.greeter = {
+    enable = lib.mkEnableOption "the greeter service";
+    message = lib.mkOption {
+      type = lib.types.str;
+      default = "Hello";
+      description = "The greeting.";
+    };
+    port = lib.mkOption {
+      type = lib.types.port;
+      default = 8000;
+      description = "The port to serve on.";
+    };
+    openFirewall = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Whether to open the port in the firewall.";
+    };
+  };
+
+  config = lib.mkIf cfg.enable {
+    systemd.services.greeter = {
+      description = "Greeter";
+      wantedBy = [ "multi-user.target" ];
+      environment.GREETING = cfg.message;
+      serviceConfig = {
+        DynamicUser = true;
+        ExecStart = "${pkgs.python3}/bin/python3 -m http.server ${toString cfg.port}";
+      };
+    };
+    networking.firewall.allowedTCPPorts = lib.optional cfg.openFirewall cfg.port;
+  };
+}
+'''
+
+[[variants]]
+statement = """
+Write module.nix, a NixOS module programs.toolbox:
+- options.programs.toolbox:
+  - enable: mkEnableOption;
+  - packages: a list of packages (types.listOf types.package), default [ ];
+  - aliases: an attribute set of strings (types.attrsOf types.str), default { };
+  - motd: a string or null (types.nullOr types.str), default null.
+- config, only when enabled:
+  - the packages in environment.systemPackages;
+  - the aliases in environment.shellAliases;
+  - when motd is not null, the file /etc/toolbox/motd with that text
+    (environment.etc."toolbox/motd".text).
+"""
+hint = "environment.etc = lib.mkIf (cfg.motd != null) { \"toolbox/motd\".text = cfg.motd; };"
+[variants.starter]
+nix = '''
+{ config, lib, pkgs, ... }:
+
+let
+  cfg = config.programs.toolbox;
+in
+{
+  options.programs.toolbox = {
+  };
+
+  config = {
+  };
+}
+'''
+[variants.setup]
+nix = '''
+on = (nixos [ file ({ pkgs, ... }: { programs.toolbox = { enable = true; packages = [ pkgs.jq pkgs.ripgrep ]; aliases.ll = "ls -l"; motd = "Welcome"; }; }) ]).config;
+plain = (nixos [ file { programs.toolbox.enable = true; } ]).config;
+off = nixos [ file ];
+names = config: map lib.getName config.environment.systemPackages;
+'''
+[variants.checks]
+nix = '''
+(check "enable is a mkEnableOption" (off.options.programs.toolbox.enable.type.name or null) "bool")
+(check "packages default" off.config.programs.toolbox.packages [ ])
+(check "motd defaults to null" off.config.programs.toolbox.motd null)
+(check "the packages are installed" (builtins.all (p: builtins.elem p (names on)) [ "jq" "ripgrep" ]) true)
+(check "disabled: nothing installed" (builtins.elem "jq" (names off.config)) false)
+(check "the aliases" (on.environment.shellAliases.ll or null) "ls -l")
+(check "the motd file" (on.environment.etc."toolbox/motd".text or null) "Welcome")
+(check "no motd, no file" (plain.environment.etc ? "toolbox/motd") false)
+(checkThrows "packages are type-checked" (nixos [ file { programs.toolbox.packages = [ "jq" ]; } ]).config.programs.toolbox.packages)
+'''
+[variants.solutions]
+nix = '''
+{ config, lib, pkgs, ... }:
+
+let
+  cfg = config.programs.toolbox;
+in
+{
+  options.programs.toolbox = {
+    enable = lib.mkEnableOption "the toolbox";
+    packages = lib.mkOption {
+      type = lib.types.listOf lib.types.package;
+      default = [ ];
+    };
+    aliases = lib.mkOption {
+      type = lib.types.attrsOf lib.types.str;
+      default = { };
+    };
+    motd = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+    };
+  };
+
+  config = lib.mkIf cfg.enable {
+    environment.systemPackages = cfg.packages;
+    environment.shellAliases = cfg.aliases;
+    environment.etc = lib.mkIf (cfg.motd != null) { "toolbox/motd".text = cfg.motd; };
+  };
+}
+'''
