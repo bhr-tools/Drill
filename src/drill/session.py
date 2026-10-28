@@ -18,12 +18,33 @@ from . import term
 from .complexity import CLASSES, Measurement, measure, report
 from .exercises import Exercise
 from .langs import Language, Outcome
-from .store import INTERVALS, Card, Store, pick
+from .store import INTERVALS, Card, Store, grade, pick
 from .term import bold, cyan, dim, fmt_time, green, red, yellow
 
 COUNTDOWN = 3  # seconds before the next exercise starts
 KEYS_HELP = "[h]int [s]kip [p]ause [r]erun [o]pen [q]uit"
 COMPLEXITY_KEY = "[c]omplexity "
+LESSON_KEY = "[l]esson "
+
+
+def level_note(before: Card | None, after: Card, reason: str) -> str:
+    """What an attempt did to the exercise's level, and when it comes back."""
+    move = f"level {before.box} → {after.box}" if before else f"new → level {after.box}"
+    if after.box == 0:
+        return f"{reason}: {move}, it comes back later in this session."
+    days = INTERVALS[after.box]
+    return f"{reason}: {move}, next review in {days} day{'s' if days > 1 else ''}."
+
+
+def grade_reason(seconds: float, target: float, hinted: bool, skipped: bool) -> str:
+    result = grade(seconds, target, hinted, skipped)
+    if skipped:
+        return "Skipped"
+    if result == "fail":
+        return "Over twice the target"
+    if hinted:
+        return "Hint used"
+    return "Over the target" if result == "ok" else "Within the target"
 
 
 def clip(text: str, width: int = 160) -> str:
@@ -134,8 +155,13 @@ class Session:
         editor: str | None,
         minutes: float | None,
         keep: bool,
+        course=None,
     ):
-        """A session over `exercises` (a mode's, or a search's), named `name` in the history."""
+        """A session over `exercises` (a mode's, or a search's), named `name` in the history.
+
+        `course`, a learn.Course, serves them in its order instead of by review dates.
+        """
+        self.course = course
         self.name = name
         self.langs = langs
         self.store = store
@@ -164,7 +190,8 @@ class Session:
         try:
             with term.Keys() as self.keys:
                 while self.deadline is None or time.monotonic() < self.deadline:
-                    ex, lang = pick(self.pool, self.store.cards(), recent)
+                    choose = self.course.pick if self.course else pick
+                    ex, lang = choose(self.pool, self.store.cards(), recent)
                     recent.append(ex.id)
                     number += 1
                     if not self.play(number, self.choose_variant(ex, lang), lang):
@@ -202,7 +229,19 @@ class Session:
         if path.name != lang.filename:
             self.laid_out.append(path)
         path.write_text(lang.starter(ex))
+        if ex.lesson:
+            lesson = self.dir / "LESSON.md"
+            lesson.write_text(textwrap.dedent(ex.lesson).strip() + "\n")
+            self.laid_out.append(lesson)
         return path
+
+    def read_lesson(self, ex: Exercise) -> bool:
+        """Open the lesson of a new step, and wait until it is read. False to quit."""
+        lesson = self.dir / "LESSON.md"
+        term.say(cyan(f"New concept: read the lesson first ({lesson})."))
+        self.open_editor(lesson)
+        term.status(dim("[enter] start the exercise and the clock  [q] quit"))
+        return self.keys.wait("\n q") != "q"
 
     def play(self, number: int, ex: Exercise, lang: Language) -> bool:
         """Run one exercise until it is solved or skipped. Returns False to end the session."""
@@ -211,16 +250,20 @@ class Session:
         threading.Thread(target=lambda: (ex.cases, ex.scale and ex.scale_cases), daemon=True).start()
         card = self.store.card(ex.id, lang.key)
         best = card.best if card else None
-        watcher, clock = Watcher(path), Clock()
         runs, hinted, report = 0, False, []
+        step = f"{self.course.label(ex)}   " if self.course else ""
 
         def redraw() -> None:
             term.clear()
             record = f"record {fmt_time(best)}" if best else "new"
+            level = f"level {card.box}/{len(INTERVALS) - 1}" if card else ""
             variant = f" · variant {ex.variant + 1}/{ex.n_variants}" if ex.n_variants > 1 else ""
+            if step:
+                term.say(cyan(step))
             term.say(
                 bold(f"#{number}  {ex.title}")
-                + dim(f"   {lang.label} · target {fmt_time(ex.target)} · {record}{variant}")
+                + dim(f"   {lang.label} · target {fmt_time(ex.target)} · {record}")
+                + dim(f" · {level}" if level else "") + dim(variant)
             )
             term.say(dim(str(path)))
             term.say()
@@ -232,6 +275,11 @@ class Session:
 
         redraw()
         self.open_editor(path)
+        if ex.lesson and self.course and self.course.is_new(ex):
+            if not self.read_lesson(ex):
+                return False
+            redraw()
+        watcher, clock = Watcher(path), Clock()
         while True:
             term.status(self.status_line(clock.elapsed(), ex, lang))
             key = self.keys.get(0.2)
@@ -239,6 +287,8 @@ class Session:
                 return False
             if key == "o":
                 self.open_editor(path)
+            elif key == "l" and ex.lesson:
+                self.open_editor(self.dir / "LESSON.md")
             elif key == "c" and ex.scale and lang.measurable:
                 clock.pause()  # a detour to learn from, not part of the solving time
                 lines = self.estimate(ex, lang, path)
@@ -257,13 +307,13 @@ class Session:
                 if key == "q":
                     return False
             elif key == "s":
-                self.store.record(
+                after = self.store.record(
                     self.session, ex.id, lang.key, ex.mode, clock.elapsed(), ex.target,
                     runs, hinted, skipped=True, variant=ex.variant,
                 )
                 self.n_skipped += 1
                 term.say()
-                term.say(yellow("↷ Skipped — it will come back later in the session."))
+                term.say(yellow("↷ " + level_note(card, after, "Skipped")))
                 return self.reveal(ex, lang)
             if key == "r" or watcher.changed():
                 runs += 1
@@ -271,14 +321,15 @@ class Session:
                 term.status(dim("Running tests…"))
                 outcome = lang.run(ex, path, self.dir / ".build" / lang.key)
                 if outcome.passed:
-                    return self.solved(ex, lang, solved_at, runs, hinted, best)
+                    return self.solved(ex, lang, solved_at, runs, hinted, card)
                 report = [*failure_lines(ex, lang, outcome), dim(f"  run {runs}")]
                 redraw()
 
     def solved(
         self, ex: Exercise, lang: Language, seconds: float, runs: int, hinted: bool,
-        best: float | None,
+        before: Card | None,
     ) -> bool:
+        best = before.best if before else None
         card = self.store.record(
             self.session, ex.id, lang.key, ex.mode, seconds, ex.target, runs, hinted,
             skipped=False, variant=ex.variant,
@@ -296,7 +347,7 @@ class Session:
                 line += dim(f"  · record {fmt_time(best)}")
         term.say()
         term.say(line)
-        term.say(dim(self.review_note(card)))
+        term.say(dim(level_note(before, card, grade_reason(seconds, ex.target, hinted, False))))
         if ex.mode == "optim" and ex.explanation:
             # Understanding why the new version is faster is the point: no countdown
             term.say()
@@ -306,13 +357,6 @@ class Session:
             key = self.keys.wait("\n qv")
             return self.reveal(ex, lang, explain=False) if key == "v" else key != "q"
         return self.countdown(ex, lang)
-
-    @staticmethod
-    def review_note(card: Card) -> str:
-        if card.box == 0:
-            return "Over twice the target: it comes back later in this session."
-        days = INTERVALS[card.box]
-        return f"Next review in {days} day{'s' if days > 1 else ''}."
 
     def countdown(self, ex: Exercise, lang: Language) -> bool:
         end = time.monotonic() + COUNTDOWN
@@ -392,7 +436,8 @@ class Session:
         parts = [colour(f"⏱ {fmt_time(elapsed)}") + dim(f" / {fmt_time(target)}")]
         if self.deadline:
             parts.append(dim(f"session {fmt_time(max(0.0, self.deadline - time.monotonic()))} left"))
-        parts.append(dim((COMPLEXITY_KEY if ex.scale and lang.measurable else "") + KEYS_HELP))
+        keys = (COMPLEXITY_KEY if ex.scale and lang.measurable else "") + (LESSON_KEY if ex.lesson else "")
+        parts.append(dim(keys + KEYS_HELP))
         return "   ".join(parts)
 
     def open_editor(self, path: Path) -> None:

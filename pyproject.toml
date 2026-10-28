@@ -14,8 +14,5 @@ drill = "drill.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
-[tool.setuptools.package-data]
-drill = ["exercises/*/*.toml"]
-
 [tool.ruff]
 line-length = 100

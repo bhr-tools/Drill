@@ -22,6 +22,15 @@
           src = ./.;
 
           build-system = [ pkgs.python3Packages.setuptools ];
+          nativeBuildInputs = [ pkgs.installShellFiles ];
+
+          # The scripts ask `drill __complete` for the candidates, so they never go stale
+          postInstall = ''
+            export PYTHONPATH="$out/${pkgs.python3.sitePackages}''${PYTHONPATH:+:$PYTHONPATH}"
+            ${pkgs.python3.interpreter} -m drill completion zsh > _drill
+            ${pkgs.python3.interpreter} -m drill completion bash > drill.bash
+            installShellCompletion --cmd drill --zsh _drill --bash drill.bash
+          '';
 
           makeWrapperArgs = [
             "--prefix" "PATH" ":" (pkgs.lib.makeBinPath (toolchain pkgs))

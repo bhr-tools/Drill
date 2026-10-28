@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import select
 import sys
 import termios
@@ -29,6 +30,31 @@ def fmt_time(seconds: float) -> str:
 def fmt_duration(seconds: float) -> str:
     minutes = int(seconds // 60)
     return f"{minutes // 60}h{minutes % 60:02d}" if minutes >= 60 else f"{minutes} min"
+
+
+ANSI = re.compile(r"\033\[[0-9;]*m")
+SPARKS = "▁▂▃▄▅▆▇█"
+
+
+def pad(text: str, width: int, right: bool = False) -> str:
+    """`text` padded to `width` visible characters, colours not counted."""
+    space = " " * max(0, width - len(ANSI.sub("", text)))
+    return space + text if right else text + space
+
+
+def spark(values: list[float], top: float | None = None) -> str:
+    """A sparkline of `values`, scaled from 0 to `top` (default: their maximum)."""
+    top = top or max(values, default=0) or 1
+    return "".join(SPARKS[min(len(SPARKS) - 1, int(v / top * (len(SPARKS) - 1) + 0.5))] for v in values)
+
+
+def ago(seconds: float) -> str:
+    """A rough duration: 5 min, 3 h, 2 d."""
+    if seconds < 3600:
+        return f"{max(1, round(seconds / 60))} min"
+    if seconds < 36 * 3600:
+        return f"{round(seconds / 3600)} h"
+    return f"{round(seconds / 86400)} d"
 
 
 def say(text: str = "") -> None:

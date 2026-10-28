@@ -4,10 +4,8 @@ from __future__ import annotations
 
 import copy
 import json
-import os
 import random
 import re
-import sys
 import textwrap
 import tomllib
 from dataclasses import dataclass, field
@@ -15,10 +13,8 @@ from functools import cached_property
 from pathlib import Path
 
 from .complexity import CLASSES, canonical
-from .store import data_dir
 from .term import fmt_time
 
-BUILTIN = Path(__file__).parent / "exercises"
 MODES = ("sprint", "normal", "hard", "optim")
 DEFAULT_LIMIT = 2.0  # seconds allowed for a performance test
 SCALE_LIMIT = 1.5  # seconds allowed for one size of a complexity measurement
@@ -116,7 +112,11 @@ class Exercise:
     complexity: str | None = None  # the optimal complexity, in the notation of complexity.py
     scale: dict | None = None  # how to build an input of size n, to measure complexity
     explanation: str | None = None  # the theory, shown with the reference solution
-    pack: str | None = None  # the pack the exercise comes from, if any
+    pack: str | None = None  # the slug of the pack or learn course it comes from, if any
+    origin: str = "drill"  # drill (the base), pack or learn
+    # learn courses: the chapter, and the lesson read before the exercise
+    chapter: str | None = None
+    lesson: str | None = None
     # "code" kind: the file the student edits, instead of the language's solution file
     # (flake.nix, module.nix…), and files written next to it (a project to package…)
     file: str | None = None
@@ -150,10 +150,15 @@ class Exercise:
         return lang in self.solutions if self.solutions else lang in GENERAL_LANGS
 
     def matches(self, query: str) -> bool:
-        """Search by id, title, tag or mode, ignoring case."""
+        """Search by a mode, an origin (drill, pack, learn), or a part of the id, the title or
+        a tag, ignoring case."""
         query = query.lower()
-        fields = [self.id, self.title.lower(), self.mode, *self.tags]
-        return query == self.id or any(query in f for f in fields)
+        if query in MODES:
+            return self.mode == query
+        if query in ("drill", "pack", "learn"):
+            return self.origin == query
+        fields = [self.id, self.title.lower(), *self.tags]
+        return any(query in f for f in fields)
 
     def describe(self, lang) -> list[str]:
         """Statement lines for the top of the solution file, with `lang`'s syntax."""
@@ -216,13 +221,15 @@ class Exercise:
         return json.loads(json.dumps(scope[self.name](*copy.deepcopy(args))))
 
 
-def parse(data: dict, id: str, mode: str | None, pack: str | None = None) -> Exercise:
+def parse(
+    data: dict, id: str, mode: str | None, pack: str | None = None, origin: str = "drill"
+) -> Exercise:
     """An exercise and its variants from TOML data. `mode` is the default when data has none.
 
     A variant is a table of [[variants]] that replaces any key it sets.
     """
     base = {k: v for k, v in data.items() if k != "variants"}
-    exercise = _parse_one(base, id, mode, pack)
+    exercise = _parse_one(base, id, mode, pack, origin)
     variants = []
     for number, overrides in enumerate(data.get("variants", ()), 1):
         merged = dict(base)
@@ -231,7 +238,7 @@ def parse(data: dict, id: str, mode: str | None, pack: str | None = None) -> Exe
                 merged.pop(key, None)
         merged.update(overrides)
         try:
-            variants.append(_parse_one(merged, id, mode, pack, variant=number))
+            variants.append(_parse_one(merged, id, mode, pack, origin, variant=number))
         except (KeyError, ExerciseError) as e:
             detail = f"missing key {e}" if isinstance(e, KeyError) else str(e)
             raise ExerciseError(f"variant {number + 1}: {detail}") from None
@@ -241,7 +248,9 @@ def parse(data: dict, id: str, mode: str | None, pack: str | None = None) -> Exe
     return exercise
 
 
-def _parse_one(data: dict, id: str, mode: str | None, pack: str | None, variant: int = 0) -> Exercise:
+def _parse_one(
+    data: dict, id: str, mode: str | None, pack: str | None, origin: str, variant: int = 0
+) -> Exercise:
     mode = data.get("mode", mode)
     if mode not in MODES:
         raise ExerciseError(f"mode must be one of {', '.join(MODES)}, not {mode!r}")
@@ -257,6 +266,9 @@ def _parse_one(data: dict, id: str, mode: str | None, pack: str | None, variant:
         langs=tuple(data["langs"]) if "langs" in data else None,
         explanation=data.get("explanation"),
         pack=pack,
+        origin=origin,
+        chapter=data.get("chapter"),
+        lesson=data.get("lesson"),
         variant=variant,
         files={relative_file(name): text for name, text in data.get("files", {}).items()},
     )
@@ -306,29 +318,15 @@ def _parse_one(data: dict, id: str, mode: str | None, pack: str | None, variant:
 
 
 def load(path: Path) -> Exercise:
+    """A library exercise file. Its id and mode default to the file and folder names."""
+    return load_text(path.read_text(), path)
+
+
+def load_text(text: str, path: Path) -> Exercise:
     try:
-        return parse(tomllib.loads(path.read_text()), path.stem, path.parent.name)
+        data = tomllib.loads(text)
+        folder = path.parent.name
+        return parse(data, data.get("id", path.stem), folder if folder in MODES else None)
     except (KeyError, tomllib.TOMLDecodeError, ExerciseError) as e:
         detail = f"missing key {e}" if isinstance(e, KeyError) else str(e)
         raise ExerciseError(f"{path}: {detail}") from None
-
-
-def search_path() -> list[Path]:
-    """Built-in exercises, then the user's own (later ones override by id)."""
-    extra = os.environ.get("DRILL_EXERCISES", "")
-    return [BUILTIN, data_dir() / "exercises", *(Path(p) for p in extra.split(os.pathsep) if p)]
-
-
-def load_all() -> list[Exercise]:
-    found: dict[str, Exercise] = {}
-    for root in search_path():
-        if not root.is_dir():
-            continue
-        for path in sorted(root.rglob("*.toml")):
-            try:
-                exercise = load(path)
-            except ExerciseError as e:
-                print(f"drill: skipping {e}", file=sys.stderr)
-                continue
-            found[exercise.id] = exercise
-    return sorted(found.values(), key=lambda e: (MODES.index(e.mode), e.id))

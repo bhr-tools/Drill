@@ -1,9 +1,18 @@
-"""Persistent history (SQLite) and Leitner-box scheduling of exercises."""
+"""History and Leitner-box scheduling of exercises.
+
+The history lives in the library, in history/<machine>.jsonl: one line per attempt or
+complexity estimate, appended by that machine only, so that git merges the machines'
+histories without conflicts. The SQLite database is a local cache of them, rebuilt
+whenever a file has changed (after a pull), the levels replayed from the attempts.
+"""
 
 from __future__ import annotations
 
+import json
 import os
 import random
+import re
+import socket
 import sqlite3
 import time
 from dataclasses import dataclass
@@ -46,6 +55,7 @@ CREATE TABLE IF NOT EXISTS estimates (
     slope REAL NOT NULL,
     correct INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS cards (
     exercise TEXT NOT NULL,
     lang TEXT NOT NULL,
@@ -79,8 +89,25 @@ def grade(seconds: float, target: float, hinted: bool, skipped: bool) -> str:
     return "good"
 
 
+def advance(card: Card | None, exercise: str, lang: str, attempt: dict) -> Card:
+    """The card after an attempt: up a box when good, down when ok, back to 0 on a fail."""
+    box = card.box if card else 0
+    box = {"good": min(box + 1, len(INTERVALS) - 1), "ok": max(box - 1, 1), "fail": 0}[attempt["grade"]]
+    best = card.best if card else None
+    seconds = attempt["seconds"]
+    if attempt["outcome"] == "pass" and not attempt["hinted"] and (best is None or seconds < best):
+        best = seconds
+    return Card(exercise, lang, box, attempt["finished"] + INTERVALS[box] * DAY, best)
+
+
+def machine() -> str:
+    name = os.environ.get("DRILL_MACHINE") or socket.gethostname()
+    return re.sub(r"[^A-Za-z0-9_.-]+", "-", name) or "machine"
+
+
 class Store:
-    def __init__(self, path: Path | None = None):
+    def __init__(self, history: Path | None = None, path: Path | None = None):
+        """`history`: the library's history folder; None keeps the history in the cache only."""
         path = path or data_dir() / "history.db"
         path.parent.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(path)
@@ -90,6 +117,102 @@ class Store:
         if "variant" not in columns:  # history from before variants
             with self.db:
                 self.db.execute("ALTER TABLE attempts ADD COLUMN variant INTEGER NOT NULL DEFAULT 0")
+        self.history = history
+        if history is not None:
+            self.own = history / f"{machine()}.jsonl"
+            self.export_local()
+            if self.signature() != self.meta("signature"):
+                self.rebuild()
+
+    def meta(self, key: str) -> str | None:
+        row = self.db.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+        return row["value"] if row else None
+
+    def set_meta(self, key: str, value: str) -> None:
+        with self.db:
+            self.db.execute(
+                "INSERT INTO meta (key, value) VALUES (?, ?)"
+                " ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+                (key, value),
+            )
+
+    def signature(self) -> str:
+        """Changes when a history file does."""
+        files = sorted(self.history.glob("*.jsonl")) if self.history.is_dir() else []
+        return "|".join(f"{f.name}:{f.stat().st_size}:{f.stat().st_mtime_ns}" for f in files)
+
+    def append(self, entry: dict) -> None:
+        """Add an entry to this machine's history file; the cache already has it."""
+        if self.history is None:
+            return
+        current = self.signature() == self.meta("signature")
+        self.own.parent.mkdir(parents=True, exist_ok=True)
+        with self.own.open("a") as f:
+            f.write(json.dumps(entry, separators=(",", ":")) + "\n")
+        if current:  # else another file changed too: rebuild next time
+            self.set_meta("signature", self.signature())
+
+    def export_local(self) -> None:
+        """Once: write the history kept only in the cache (from before the library held
+        it) to this machine's file."""
+        if self.meta("exported") is not None:
+            return
+        if not self.own.exists():
+            entries = [
+                {"type": "attempt", **{k: r[k] for k in r.keys() if k not in ("id", "session")},
+                 "session": f"{machine()}/{r['session']}"}
+                for r in self.attempts()
+            ] + [
+                {"type": "estimate", **{k: r[k] for k in r.keys() if k != "id"},
+                 "measured": r["measured"].split(",") if r["measured"] else []}
+                for r in self.estimates()
+            ]
+            if entries:
+                entries.sort(key=lambda e: e["finished"])
+                self.own.parent.mkdir(parents=True, exist_ok=True)
+                with self.own.open("w") as f:
+                    for entry in entries:
+                        f.write(json.dumps(entry, separators=(",", ":")) + "\n")
+        self.set_meta("exported", "1")
+
+    def rebuild(self) -> None:
+        """Rebuild the cache from every machine's history file."""
+        entries = []
+        for path in sorted(self.history.glob("*.jsonl")) if self.history.is_dir() else []:
+            for line in path.read_text().splitlines():
+                try:
+                    entries.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue  # a line cut short
+        entries.sort(key=lambda e: e.get("finished", 0))
+        cards: dict[tuple[str, str], Card] = {}
+        with self.db:
+            for table in ("attempts", "estimates", "cards"):
+                self.db.execute(f"DELETE FROM {table}")
+            for e in entries:
+                if e.get("type") == "estimate":
+                    self.db.execute(
+                        "INSERT INTO estimates (finished, exercise, lang, guess, measured, slope,"
+                        " correct) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (e["finished"], e["exercise"], e["lang"], e["guess"],
+                         ",".join(e["measured"]), e["slope"], e["correct"]),
+                    )
+                    continue
+                key = (e["exercise"], e["lang"])
+                cards[key] = advance(cards.get(key), *key, e)
+                self.db.execute(
+                    "INSERT INTO attempts (session, exercise, lang, mode, finished, seconds,"
+                    " target, runs, hinted, outcome, grade, variant)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (e.get("session"), e["exercise"], e["lang"], e["mode"], e["finished"],
+                     e["seconds"], e["target"], e["runs"], e["hinted"], e["outcome"], e["grade"],
+                     e.get("variant", 0)),
+                )
+            self.db.executemany(
+                "INSERT INTO cards (exercise, lang, box, due, best) VALUES (?, ?, ?, ?, ?)",
+                [(c.exercise, c.lang, c.box, c.due, c.best) for c in cards.values()],
+            )
+        self.set_meta("signature", self.signature())
 
     def start_session(self, mode: str, langs: list[str]) -> int:
         with self.db:
@@ -123,6 +246,11 @@ class Store:
         )
         return {r["variant"]: r["last"] for r in rows}
 
+    def passed(self) -> set[str]:
+        """The exercises solved at least once, in any language."""
+        rows = self.db.execute("SELECT DISTINCT exercise FROM attempts WHERE outcome = 'pass'")
+        return {r["exercise"] for r in rows}
+
     def attempts(self) -> list[sqlite3.Row]:
         return self.db.execute("SELECT * FROM attempts ORDER BY finished").fetchall()
 
@@ -130,12 +258,16 @@ class Store:
         self, exercise: str, lang: str, guess: str, measured: list[str], slope: float
     ) -> None:
         """Store a complexity estimate and what the measurement found."""
+        entry = {"type": "estimate", "finished": time.time(), "exercise": exercise, "lang": lang,
+                 "guess": guess, "measured": measured, "slope": slope, "correct": guess in measured}
         with self.db:
             self.db.execute(
                 "INSERT INTO estimates (finished, exercise, lang, guess, measured, slope, correct)"
                 " VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (time.time(), exercise, lang, guess, ",".join(measured), slope, guess in measured),
+                (entry["finished"], exercise, lang, guess, ",".join(measured), slope,
+                 entry["correct"]),
             )
+        self.append(entry)
 
     def estimates(self) -> list[sqlite3.Row]:
         return self.db.execute("SELECT * FROM estimates ORDER BY finished").fetchall()
@@ -154,28 +286,28 @@ class Store:
         variant: int = 0,
     ) -> Card:
         """Store an attempt and move the exercise to its next Leitner box."""
-        now = time.time()
-        result = grade(seconds, target, hinted, skipped)
-        card = self.card(exercise, lang)
-        box = card.box if card else 0
-        box = {"good": min(box + 1, len(INTERVALS) - 1), "ok": max(box - 1, 1), "fail": 0}[result]
-        best = card.best if card else None
-        if not skipped and not hinted and (best is None or seconds < best):
-            best = seconds
-        updated = Card(exercise, lang, box, now + INTERVALS[box] * DAY, best)
+        attempt = {
+            "type": "attempt", "session": f"{machine()}/{session}", "exercise": exercise,
+            "lang": lang, "mode": mode, "finished": time.time(), "seconds": seconds,
+            "target": target, "runs": runs, "hinted": hinted,
+            "outcome": "skip" if skipped else "pass",
+            "grade": grade(seconds, target, hinted, skipped), "variant": variant,
+        }
+        updated = advance(self.card(exercise, lang), exercise, lang, attempt)
         with self.db:
             self.db.execute(
                 "INSERT INTO attempts (session, exercise, lang, mode, finished, seconds, target,"
                 " runs, hinted, outcome, grade, variant) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (session, exercise, lang, mode, now, seconds, target, runs, hinted,
-                 "skip" if skipped else "pass", result, variant),
+                (session, exercise, lang, mode, attempt["finished"], seconds, target, runs, hinted,
+                 attempt["outcome"], attempt["grade"], variant),
             )
             self.db.execute(
                 "INSERT INTO cards (exercise, lang, box, due, best) VALUES (?, ?, ?, ?, ?)"
                 " ON CONFLICT (exercise, lang) DO UPDATE"
                 " SET box = excluded.box, due = excluded.due, best = excluded.best",
-                (exercise, lang, box, updated.due, best),
+                (exercise, lang, updated.box, updated.due, updated.best),
             )
+        self.append(attempt)
         return updated
 
 
