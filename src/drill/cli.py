@@ -60,10 +60,14 @@ def add_session_options(p: argparse.ArgumentParser, lang_default: str | None) ->
     p.add_argument("--keep", action="store_true", help="keep the session folder at the end")
 
 
-def add_prompt_options(p: argparse.ArgumentParser, lang_default: str, locale: bool = True) -> None:
+def add_prompt_options(
+    p: argparse.ArgumentParser, lang_default: str | None, locale: bool = True
+) -> None:
     p.add_argument(
         "-l", "--lang", type=parse_langs, default=lang_default,
-        help=f"languages of the exercises: {', '.join(LANGUAGES)}, a comma-separated list, or mix",
+        help=f"languages of the exercises: {', '.join(LANGUAGES)}, a comma-separated list, or "
+             "mix" + ("" if lang_default else " (default: the ones the material uses, else "
+                                               "$DRILL_LANG or python)"),
     )
     if locale:
         p.add_argument(
@@ -75,7 +79,6 @@ def add_prompt_options(p: argparse.ArgumentParser, lang_default: str, locale: bo
 
 
 def add_material_options(p: argparse.ArgumentParser) -> None:
-    p.add_argument("-n", "--count", type=int, default=20, help="number of exercises (default: 20)")
     p.add_argument("--topic", help="the part of the material to cover, or the subject without it")
     p.add_argument(
         "--no-material", action="store_true",
@@ -142,12 +145,16 @@ def build_parser() -> argparse.ArgumentParser:
     pp.add_argument("idea", nargs="*", help="the idea or the statement (default: read stdin)")
     add_prompt_options(pp, "mix", locale=False)
     pp = kinds.add_parser("pack", help="a pack aimed at one goal, from your course material")
+    pp.add_argument("-n", "--count", type=int, default=20, help="number of exercises (default: 20)")
     add_material_options(pp)
-    pp.add_argument("--deadline", help="the date of the goal, YYYY-MM-DD")
-    add_prompt_options(pp, os.environ.get("DRILL_LANG", "python"))
-    pp = kinds.add_parser("learn", help="a course to learn a subject step by step, with lessons")
+    add_prompt_options(pp, None)
+    pp = kinds.add_parser(
+        "learn", help="a course to learn a subject step by step, with lessons",
+        description="The AI first plans the course from the material (chapters, steps, their "
+                    "number), then writes it one chapter per reply, each added with `drill add`.",
+    )
     add_material_options(pp)
-    add_prompt_options(pp, os.environ.get("DRILL_LANG", "python"))
+    add_prompt_options(pp, None)
     pp = kinds.add_parser("variant", help="new variants of an exercise of the library")
     pp.add_argument("id", help="the exercise's id")
     pp.add_argument("-n", "--count", type=int, default=2, help="number of variants (default: 2)")
@@ -220,18 +227,28 @@ def choose(collections: list[Collection], kind: str, name: str | None) -> Collec
         return None
 
 
-def show_prompt(text: str, printed: bool, attach: bool) -> None:
+def show_prompt(text: str, printed: bool, attach: bool, learn: bool = False) -> None:
     if printed or not copy_to_clipboard(text):
         print(text)
         first = "That was the prompt."
     else:
         first = "The prompt is in the clipboard."
-    steps = [
-        first,
-        "1. Paste it to Claude" + (", and attach your course material (PDFs)." if attach else "."),
-        "2. Copy its reply, then run `drill add`: it checks the reply and files it.",
-        "   If something is wrong, the request to fix it is copied for you: paste it back.",
-    ]
+    paste = "1. Paste it to Claude" + (", and attach your course material (PDFs)." if attach else ".")
+    if learn:
+        steps = [
+            first,
+            paste + " It replies with the plan of the course.",
+            "2. Ask for changes if you want, then approve it: it sends the first chapter.",
+            "3. Copy each chapter, run `drill add` (it is appended to the course), then answer",
+            "   \"next\". If something is wrong, the request to fix it is copied: paste it back.",
+        ]
+    else:
+        steps = [
+            first,
+            paste,
+            "2. Copy its reply, then run `drill add`: it checks the reply and files it.",
+            "   If something is wrong, the request to fix it is copied for you: paste it back.",
+        ]
     print(cyan("\n".join(steps)), file=sys.stderr)
 
 
@@ -248,7 +265,8 @@ def prompt_command(parser, args, lib_or_none) -> int:
         text = prompt.build_variant(adding.exercise_text(ex, path), ex.id, langs, args.count)
         show_prompt(text, args.print, attach=False)
         return 0
-    langs = [lang.key for lang in args.lang]
+    langs = [lang.key for lang in args.lang] if args.lang else None
+    fallback = os.environ.get("DRILL_LANG", "python")
     if kind == "drill":
         idea = " ".join(args.idea) or (sys.stdin.read() if not sys.stdin.isatty() else "")
         if not idea.strip():
@@ -259,10 +277,12 @@ def prompt_command(parser, args, lib_or_none) -> int:
     if not material and not args.topic:
         parser.error("--no-material needs --topic: the subject to cover")
     if kind == "pack":
-        text = prompt.build_pack(langs, args.count, args.locale, material, args.topic, args.deadline)
+        text = prompt.build_pack(
+            langs, args.count, args.locale, material, args.topic, fallback
+        )
     else:
-        text = prompt.build_learn(langs, args.count, args.locale, material, args.topic)
-    show_prompt(text, args.print, attach=material)
+        text = prompt.build_learn(langs, args.locale, material, args.topic, fallback)
+    show_prompt(text, args.print, attach=material, learn=kind == "learn")
     return 0
 
 

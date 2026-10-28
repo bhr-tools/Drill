@@ -190,11 +190,11 @@ $ drill add                                     # reads the clipboard, checks, f
 | Request | For |
 |---|---|
 | `drill prompt drill "idea"` | one exercise for the base, from an idea or a statement seen elsewhere (or read from stdin). The AI picks the languages where it makes sense. |
-| `drill prompt pack` | a pack aimed at one goal, from your course material: attach the PDFs. `--topic` narrows the material to a part; `--deadline 2026-12-15` sets the goal's date. |
-| `drill prompt learn` | a learn course, from your course material: chapters in its order, a full lesson before each new concept. |
+| `drill prompt pack` | a pack aimed at one goal, from your course material: attach the PDFs. `--topic` narrows the material to a part. |
+| `drill prompt learn` | a learn course, from your course material. The AI first replies with a plan (chapters, steps, and how many the material needs); once you approve it, it writes one chapter per reply, each appended to the course by `drill add`. A full lesson comes before each new concept. |
 | `drill prompt variant <id>` | `-n` new variants of an exercise of the library. |
 
-Options: `-l nix,ocaml` the languages, `-L fr` the language of statements and
+Options: `-l nix,ocaml` the languages (for `pack` and `learn`, by default the ones the material's labs use, else `$DRILL_LANG`), `-L fr` the language of statements and
 lessons (default `$DRILL_LOCALE`, else English; code stays in English),
 `--no-material --topic "Nix flakes"` when there is no course to attach,
 `--print` to print the request instead of copying it.
@@ -204,7 +204,14 @@ lessons (default `$DRILL_LOCALE`, else English; code stays in English),
 `[pack]` in `pack/`, a `[learn]` in `learn/`, and `variant_of = "<id>"` with
 `[[variants]]` appended to that exercise in its own file, leaving the rest
 untouched. Something with the same id or name is replaced only after you
-confirm. `drill add file.toml` reads a file instead of the clipboard.
+confirm.
+
+From labs and tutorials, the AI keeps an exercise only when it makes a good
+exercise for the concept, made self-contained if needed, even when it is long;
+otherwise it writes a new one that trains the same skill better, and exercises in packs and courses may be long
+(up to 30 to 45 minutes) when the subject calls for it.
+
+`drill add file.toml` reads a file instead of the clipboard.
 
 `drill rm <id|pack|course>` deletes a file of the library. The history is kept,
 and git keeps the file.

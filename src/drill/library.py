@@ -14,7 +14,6 @@ import re
 import sys
 import tomllib
 from dataclasses import dataclass
-from datetime import date
 from functools import cached_property
 from pathlib import Path
 
@@ -60,7 +59,6 @@ class Collection:
     name: str
     description: str
     locale: str | None
-    deadline: date | None
     path: Path
     exercises: list[Exercise]
     errors: list[str]  # exercises that could not be read
@@ -74,8 +72,6 @@ class Collection:
 
         return [key for key in LANGUAGES if any(ex.supports(key) for ex in self.exercises)]
 
-    def days_left(self) -> int | None:
-        return (self.deadline - date.today()).days if self.deadline else None
 
 
 def parse_collection(text: str, path: Path, slug: str | None = None) -> Collection:
@@ -91,12 +87,6 @@ def parse_collection(text: str, path: Path, slug: str | None = None) -> Collecti
     kind = kinds[0]
     meta = data[kind]
     slug = slug or slugify(meta.get("name", path.stem))
-    deadline = meta.get("deadline")
-    if isinstance(deadline, str):
-        try:
-            deadline = date.fromisoformat(deadline)
-        except ValueError:
-            raise ExerciseError(f"deadline {deadline!r} is not a YYYY-MM-DD date") from None
     exercises, errors, seen = [], [], set()
     chapter = None
     for index, entry in enumerate(data.get("exercises", []), 1):
@@ -116,7 +106,7 @@ def parse_collection(text: str, path: Path, slug: str | None = None) -> Collecti
         errors.append("no [[exercises]] found")
     return Collection(
         kind, slug, meta.get("name", slug), meta.get("description", ""), meta.get("locale"),
-        deadline, path, exercises, errors,
+        path, exercises, errors,
     )
 
 

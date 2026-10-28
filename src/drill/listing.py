@@ -87,7 +87,8 @@ def when(due: float | None, now: float) -> str:
     return yellow("now") if due <= now else f"in {ago(due - now)}"
 
 
-def row(ex: Exercise, p: Progress, now: float, short: bool) -> str:
+def row(ex: Exercise, p: Progress, now: float, short: bool, mark: str = " ") -> str:
+    """`mark`: a character before the name (▸ for the next step of a course)."""
     name = ex.id.split(":", 1)[1] if short and ":" in ex.id else ex.id
     variants = f"×{ex.n_variants}" if ex.n_variants > 1 else ""
     langs = " ".join(
@@ -95,9 +96,9 @@ def row(ex: Exercise, p: Progress, now: float, short: bool) -> str:
     )
     best = fmt_time(p.best) if p.best else dim("—")
     return (
-        f"  {name:30}{variants:>3}{fmt_time(ex.target):>6}{pad(best, 6, right=True)}"
+        f"{mark} {name:30}{variants:>3}{fmt_time(ex.target):>6}{pad(best, 6, right=True)}"
         f"{p.tries or '':>6}  {level_bar(p.box)} {pad(when(p.due, now), 7)}"
-        f"  {langs}  {dim(' '.join(ex.tags))}"
+        f"  {langs}  {dim(' '.join(ex.tags))}{cyan('  lesson') if ex.lesson else ''}"
     )
 
 
@@ -122,9 +123,6 @@ def collection_line(c: Collection, prog: dict[str, Progress], store: Store, now:
     else:
         state = f"{known}/{total} known · {started - known} started"
     parts = [state] + ([yellow(f"{due} due")] if due else [])
-    days = c.days_left()
-    if days is not None:
-        parts.append(red(f"{-days} d past the deadline") if days < 0 else f"{days} d left")
     langs = ", ".join(c.langs())
     return f"  {c.slug:30} {' · '.join(parts)}  {dim(langs)}"
 
@@ -160,10 +158,26 @@ def show(
         if found:
             groups.append((f"{c.kind} {c.slug} — {c.name}", found, True))
     print(HEADER)
+    done = store.passed()
     for title, found, short in groups:
         print(bold(title))
-        for ex in found:
-            print(row(ex, prog[ex.id], now, short))
+        if found[0].origin == "learn":
+            course = next(c for c in lib.collections if c.slug == found[0].pack)
+            next_step = next((ex.id for ex in course.exercises if ex.id not in done), None)
+            chapter = None
+            for ex in found:
+                if ex.chapter != chapter:
+                    chapter = ex.chapter
+                    print(cyan(f"  {chapter}") if chapter else "")
+                mark = yellow("▸") if ex.id == next_step else " "
+                print(row(ex, prog[ex.id], now, short, mark))
+            if next_step:
+                print(dim(f"  ▸ next step: {next_step} · "
+                          f"{sum(ex.id in done for ex in course.exercises)}/"
+                          f"{len(course.exercises)} done"))
+        else:
+            for ex in found:
+                print(row(ex, prog[ex.id], now, short))
         print()
 
     if not queries and lib.collections:

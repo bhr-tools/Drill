@@ -275,7 +275,8 @@ class Session:
 
         redraw()
         self.open_editor(path)
-        if ex.lesson and self.course and self.course.is_new(ex):
+        # A step of a course not solved yet: its lesson comes first, wherever it is served
+        if ex.lesson and ex.id not in self.store.passed():
             if not self.read_lesson(ex):
                 return False
             redraw()

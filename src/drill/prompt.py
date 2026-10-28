@@ -367,7 +367,28 @@ def material_rule(material: bool, topic: str | None) -> str:
     )
     if topic:
         text += f" Focus on this part of it: {topic}."
-    return text
+    return text + """
+
+The lab sheets and tutorials show what the student must be able to do, not exercises to
+copy as they are. Reuse one of their exercises when it trains a concept of the course
+well and can be checked automatically, even if it is long; make it self-contained and
+precise when it is not (a step that depends on the rest of a lab gets the code it needs
+as its starter, or is merged with the steps before it). When a lab's exercise is not the
+best way to learn the concept (it is repetitive, vague, or mostly about something else),
+write a new exercise that trains the same skill better."""
+
+
+def language_rule(langs: list[str] | None, fallback: str, where: str) -> str:
+    """Which languages to write in: the ones given, or those the material uses."""
+    if langs:
+        return f"The exercises are in these languages: {', '.join(langs)}."
+    return (
+        "Write the exercises in the programming language the material uses (its lab sheets, "
+        f"its code examples), among those drill supports: {', '.join(LANG_NOTES)}. If it uses "
+        "several, use each where the material does. If it uses a language drill lacks, take "
+        f"the closest one (C: cpp) and say so {where}. If the material uses no programming "
+        f"language, use {fallback}."
+    )
 
 
 def file_format(langs: list[str], single: bool = False) -> str:
@@ -483,18 +504,16 @@ The file starts with the exercise's `id` and `mode`, which drill files it under.
 
 
 def build_pack(
-    langs: list[str], count: int, locale: str, material: bool, topic: str | None,
-    deadline: str | None,
+    langs: list[str] | None, count: int, locale: str, material: bool, topic: str | None,
+    fallback: str = "python",
 ) -> str:
-    """A pack: exercises aimed at one goal, made from course material."""
-    names = ", ".join(langs)
+    """A pack: exercises aimed at one goal, made from course material. Without `langs`, in
+    the languages the material uses."""
     meta = [
         'name = "Short name of the course or chapter"',
         'description = "One sentence: the course and what the pack covers."',
         f'locale = "{locale}"',
     ]
-    if deadline:
-        meta.append(f"deadline = {deadline}")
     return f"""\
 You are generating a training pack for drill. {INTRO}
 
@@ -504,15 +523,20 @@ You are generating a training pack for drill. {INTRO}
 
 {CHECKED}
 
-Write about {count} exercises, ordered from the basics to the hardest points, in these
-languages: {names}. {locale_rule(locale, "the statements, hints, explanations, and the pack's name and description")}
+Write about {count} exercises, ordered from the basics to the hardest points.
+{language_rule(langs, fallback, "in one line before the TOML block")}
+{locale_rule(locale, "the statements, hints, explanations, and the pack's name and description")}
 
 {FITTING}
 
 Give most exercises 2 or 3 variants ([[exercises.variants]]). {VARIANTS}
 
-Every mode is needed: sprint about 40%, normal 35%, hard 25%. If the subject deals with
-complexity or efficiency, also add a few optim exercises.
+A pack is for working the subject's themes in depth, not only for speed. Favour normal
+and hard exercises that make the student apply a concept fully (a whole algorithm, a
+small module, a complete transformation), with sprint exercises for the definitions and
+reflexes the rest relies on. Mix the modes as the subject demands, with no fixed share.
+A hard exercise may take 30 to 45 minutes when the subject calls for it. If the subject
+deals with complexity or efficiency, also add a few optim exercises.
 
 {MODES_TEXT}
 
@@ -521,14 +545,15 @@ The file starts with:
 [pack]
 {chr(10).join(meta)}
 
-{file_format(langs)}"""
+{file_format(langs or list(LANG_NOTES))}"""
 
 
 def build_learn(
-    langs: list[str], count: int, locale: str, material: bool, topic: str | None
+    langs: list[str] | None, locale: str, material: bool, topic: str | None,
+    fallback: str = "python",
 ) -> str:
-    """A learn course: lessons and exercises in order, each building on the previous."""
-    names = ", ".join(langs)
+    """A learn course: planned first, then written one chapter per reply. Without `langs`,
+    in the languages the material uses."""
     subject = topic or "the subject of the material"
     order = (
         "in the order the material teaches them, following its chapters"
@@ -551,15 +576,31 @@ the exercise.
 
 {material_rule(material, topic)}
 
-# What to produce
+{language_rule(langs, fallback, "in the plan")}
+{locale_rule(locale, "the plan, the lessons, statements, hints, explanations, and the course's name and description")}
+
+# How we work: the plan first, then one chapter per reply
+
+1. First, study the material and reply with the plan of the course only, without any
+   TOML. Start with the programming language(s) you chose. The chapters, {order}. For each chapter, the concepts it introduces, then its
+   steps: for each step an id, a title, its mode, the concept it trains, and whether it
+   opens with a lesson. Choose the number of steps from the material itself: as many as
+   it takes to learn each of its concepts properly, and no more (a short tutorial may
+   need 10, a semester's course 60 or more). End with a line that justifies this size.
+   I may ask you to change the plan.
+2. When I approve it, write the course one chapter per reply, following the plan. Each
+   reply is a TOML file starting with the same [learn] table, followed by the chapter's
+   [[exercises]]; drill appends each chapter to the ones already added. Ids are unique
+   across the whole course. After each chapter, I check it with drill and answer "next",
+   or send you what drill found wrong.
+
+# Each chapter's reply
 
 {CHECKED}
 
-Write about {count} exercises in these languages: {names}. {locale_rule(locale, "the lessons, statements, hints, explanations, and the course's name and description")}
-
 How to build the course:
-- Chapters, {order}. Set `chapter` ("1. Attribute sets") on the first exercise of each
-  chapter; the following ones belong to it until the next `chapter`.
+- Set `chapter` ("1. Attribute sets") on the first exercise of each chapter; the
+  following ones belong to it until the next `chapter`.
 - One new concept per step at most. An exercise uses only what earlier steps and its own
   lesson taught: never a function, a syntax or an idea not seen yet.
 - The first exercise of each concept has a `lesson`: a complete explanation in Markdown,
@@ -571,6 +612,8 @@ How to build the course:
   or 3 variants each.
 - The difficulty rises: sprint for a first contact, normal for practice, and a hard
   exercise to close each chapter, combining its concepts.
+- The exercises are there to learn, not to be fast: make them as long as the concept
+  needs (a hard exercise may take 30 to 45 minutes), and set `target` accordingly.
 
 {FITTING}
 
@@ -578,7 +621,7 @@ How to build the course:
 
 {MODES_TEXT}
 
-The file starts with:
+Every chapter's file starts with:
 
 [learn]
 name = "Short name of the course"
@@ -593,7 +636,7 @@ lesson = '''
 ...
 '''
 
-{file_format(langs)}"""
+{file_format(langs or list(LANG_NOTES))}"""
 
 
 def build_variant(exercise_toml: str, exercise_id: str, langs: list[str], count: int) -> str:

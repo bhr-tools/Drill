@@ -17,7 +17,7 @@ from pathlib import Path
 from .checking import check, copy_to_clipboard, fix_request, paste, unfence
 from .exercises import Exercise, ExerciseError, load_text
 from .langs import LANGUAGES
-from .library import Library, parse_collection, theme
+from .library import Collection, Library, parse_collection, theme
 from .term import bold, dim, green, red, yellow
 
 HEADER = re.compile(r"^\s*(\[\[?)\s*([A-Za-z0-9_.\-]+)\s*(\]\]?)\s*(#.*)?$")
@@ -160,20 +160,57 @@ def add_collection(lib: Library, text: str, force: bool) -> int:
         return reject([f"- {e}"])
     print(bold(collection.name) + dim(f"  ·  {collection.kind}  ·  {len(collection.exercises)}"
                                       f" exercises  ·  {collection.counts()}"))
-    if (problems := checked(collection.exercises, collection.errors, force)) is not None:
-        return reject(problems)
     target = lib.root / collection.kind / f"{collection.slug}.toml"
     clash = [c for c in lib.collections if c.slug == collection.slug]
     if any(c.kind != collection.kind for c in clash):
         print(red(f"A {clash[0].kind} is already named {collection.slug}: rename this one."))
         return 1
+    if clash and collection.kind == "learn":
+        old_ids = {ex.id for ex in clash[0].exercises}
+        if not old_ids & {ex.id for ex in collection.exercises}:
+            return add_chapter(lib, clash[0], text, collection, force)
+    if (problems := checked(collection.exercises, collection.errors, force)) is not None:
+        return reject(problems)
     if clash:
-        print(yellow(f"{collection.kind} {collection.slug} already exists."))
-        if not ask("Replace it? Its history is kept."):
+        old = clash[0]
+        print(yellow(f"{old.kind} {old.slug} already exists, with {len(old.exercises)} exercises; "
+                     f"this file has {len(collection.exercises)}, some with the same ids."))
+        if not ask("Replace the whole of it with this file? Its history is kept."):
             print("Not added.")
             return 1
     write(lib, target, text)
     print(f"Practise it with `drill {collection.kind} {collection.slug}`.")
+    return 0
+
+
+def add_chapter(
+    lib: Library, course: Collection, text: str, chapter: Collection, force: bool
+) -> int:
+    """Append the [[exercises]] of a reply to a learn course: its next chapter."""
+    lines = text.splitlines(keepends=True)
+    starts = [i for i, name, array in headers(lines) if array and name == "exercises"]
+    if not starts:
+        print(red("The reply has no [[exercises]]."))
+        return reject(["- the chapter has no [[exercises]]"])
+    old_text = course.path.read_text()
+    new_text = old_text + ("" if old_text.endswith("\n") else "\n") + "\n" + "".join(lines[starts[0]:])
+    try:
+        updated = parse_collection(new_text, course.path, course.slug)
+    except ExerciseError as e:
+        print(red(str(e)))
+        return reject([f"- {e}"])
+    added = updated.exercises[len(course.exercises):]
+    if len(added) != len(chapter.exercises):
+        print(red("The chapter could not be appended to the course safely."))
+        return 1
+    print(dim(f"A new chapter for {course.slug}: steps {len(course.exercises) + 1} to "
+              f"{len(updated.exercises)}."))
+    if (problems := checked(added, chapter.errors, force)) is not None:
+        return reject(problems)
+    course.path.write_text(new_text)
+    print(green(f"✓ {course.path.relative_to(lib.root)}: {len(updated.exercises)} steps "
+                f"(+{len(added)})"))
+    print("Answer \"next\" to the AI for the following chapter.")
     return 0
 
 
