@@ -7,6 +7,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import tomllib
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -16,7 +17,7 @@ from .session import failure_lines
 from .term import bold, dim, green, red
 
 ANSI = re.compile(r"\033\[[0-9;]*m")
-FENCE = re.compile(r"```[a-z]*\n(.*?)```", re.S)
+FENCE_OPEN = re.compile(r"^(```+|~~~+)\s*toml\s*$", re.M)
 
 
 def perf_usage(ex: Exercise, lang: Language, outcome: Outcome) -> str:
@@ -104,9 +105,21 @@ def paste() -> str | None:
 
 
 def unfence(text: str) -> str:
-    """The TOML of an AI's reply: its first code block, or the whole text if it has none."""
-    match = FENCE.search(text)
-    return match.group(1) if match else text
+    """The TOML of an AI's reply: the text itself when it is TOML (the code block alone was
+    copied), else its ```toml block. The block runs to the last closing fence of the reply,
+    as lessons inside it may hold code blocks of their own."""
+    try:
+        tomllib.loads(text)
+        return text
+    except tomllib.TOMLDecodeError:
+        pass
+    match = FENCE_OPEN.search(text)
+    if not match:
+        return text
+    fence = match.group(1)
+    lines = text[match.end():].split("\n")[1:]
+    closing = [i for i, line in enumerate(lines) if line.strip() == fence]
+    return "\n".join(lines[: closing[-1]] if closing else lines) + "\n"
 
 
 def fix_request(problems: list[str]) -> str:

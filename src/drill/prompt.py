@@ -603,6 +603,8 @@ How to build the course:
   following ones belong to it until the next `chapter`.
 - One new concept per step at most. An exercise uses only what earlier steps and its own
   lesson taught: never a function, a syntax or an idea not seen yet.
+- In lessons, write code blocks between ~~~ lines (~~~ocaml ... ~~~), never between
+  backticks: your reply is itself a ```toml block, which backticks would close.
 - The first exercise of each concept has a `lesson`: a complete explanation in Markdown,
   read before the exercise, with no length limit (40 to 150 lines is typical). Why the
   concept exists, how it works, commented examples (other than the exercise), the common
