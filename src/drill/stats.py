@@ -84,7 +84,7 @@ def mastery_table(lib: Library, store: Store, now: float) -> None:
     print(f"  {'drill':30} {known}/{total} known · {started - known} started · "
           f"{total - started} never done")
     for c in lib.collections:
-        print(collection_line(c, prog, store, now))
+        print(collection_line(c, prog, now))
 
 
 def coming_up(store: Store, lib: Library, now: float) -> None:
@@ -141,9 +141,9 @@ def weak_spots(rows, lib: Library) -> None:
     print(bold("Weak spots"))
     for value, tag, n in weakest_tags:
         colour = green if value <= 1 else yellow if value <= 2 else red
-        print(f"  tag {tag:24}{colour(f'{value:.1f}×')}  {dim(f'{n} attempts')}")
+        print(f"  tag {tag:24} {colour(f'{value:.1f}×')}  {dim(f'{n} attempts')}")
     for n, ex_id in missed:
-        print(f"  {ex_id:28}{red(f'{n} missed')}  {dim('skipped or over twice the target')}")
+        print(f"  {ex_id.split(':')[-1]:28} {red(f'{n} missed')}  {dim('skipped or over twice the target')}")
 
 
 def show(store: Store, lib: Library) -> None:
