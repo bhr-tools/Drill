@@ -107,7 +107,7 @@ def paste() -> str | None:
 def unfence(text: str) -> str:
     """The TOML of an AI's reply: the text itself when it is TOML (the code block alone was
     copied), else its ```toml block. The block runs to the last closing fence of the reply,
-    as lessons inside it may hold code blocks of their own."""
+    as statements or explanations inside it may hold code blocks of their own."""
     try:
         tomllib.loads(text)
         return text

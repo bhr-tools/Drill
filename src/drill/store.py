@@ -311,11 +311,13 @@ class Store:
         return updated
 
 
-def pick(pool: list, cards: dict[tuple[str, str], Card], recent, rng=random):
-    """Choose the next (exercise, language) pair from `pool`.
+def pick(pool: list, cards: dict[tuple[str, str], Card], recent, in_order: bool = False,
+         ahead: bool = False, rng=random):
+    """The next (exercise, language) pair from `pool`, or None when nothing is left.
 
-    Due reviews come first (most overdue first), mixed with unseen exercises so new
-    material keeps flowing. Exercises in `recent` are avoided when possible.
+    First the reviews due, most overdue first; then the exercises never done, in the
+    pool's order (`in_order`) or at random. Exercises in `recent` wait while others
+    remain. With `ahead`, practise the rest instead of stopping, soonest due first.
     """
     now = time.time()
     fresh = [p for p in pool if p[0].id not in recent] or pool
@@ -323,11 +325,13 @@ def pick(pool: list, cards: dict[tuple[str, str], Card], recent, rng=random):
     def key(pair):
         return pair[0].id, pair[1].key
 
-    due = [p for p in fresh if key(p) in cards and cards[key(p)].due <= now]
-    new = [p for p in fresh if key(p) not in cards]
-    if due and (not new or rng.random() < 0.7):
-        return min(due, key=lambda p: (cards[key(p)].due, rng.random()))
-    if new:
-        return rng.choice(new)
-    # Nothing due: practise ahead, starting with what would come back soonest
-    return min(fresh, key=lambda p: (cards[key(p)].due, rng.random()))
+    for pairs in (fresh, pool):
+        due = [p for p in pairs if key(p) in cards and cards[key(p)].due <= now]
+        if due:
+            return min(due, key=lambda p: (cards[key(p)].due, rng.random()))
+        new = [p for p in pairs if key(p) not in cards]
+        if new:
+            return new[0] if in_order else rng.choice(new)
+    if ahead:
+        return min(fresh, key=lambda p: (cards[key(p)].due, rng.random()))
+    return None

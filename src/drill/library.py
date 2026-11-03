@@ -1,8 +1,7 @@
 """The library: the folder, a git repository of its own, that holds every exercise.
 
     drill/<theme>/<id>.toml   the base: one exercise per file, practised for good
-    pack/<slug>.toml          packs: exercises aimed at one goal (a course, an exam)
-    learn/<slug>.toml         learn courses: lessons and exercises, in order
+    learn/<slug>.toml         learn modules: the practical work of a course, in order
 
 Its location comes from $DRILL_LIBRARY, which must be set.
 """
@@ -19,7 +18,7 @@ from pathlib import Path
 
 from .exercises import MODES, Exercise, ExerciseError, load, parse
 
-KINDS = ("pack", "learn")  # the kinds of collections, each in the folder of its name
+KINDS = ("learn",)  # the kinds of collections, each in the folder of its name
 SLUG = re.compile(r"[^a-z0-9]+")
 
 
@@ -32,7 +31,7 @@ def root() -> Path:
     if not value:
         raise LibraryError(
             "DRILL_LIBRARY is not set. Point it to your exercise library, a folder with "
-            "drill/, pack/ and learn/ in it:\n  export DRILL_LIBRARY=~/Dev/Drill-library"
+            "drill/ and learn/ in it:\n  export DRILL_LIBRARY=~/Dev/Drill-library"
         )
     path = Path(value).expanduser()
     if not path.is_dir():
@@ -54,7 +53,7 @@ def theme(ex: Exercise) -> str:
 
 @dataclass
 class Collection:
-    kind: str  # pack or learn
+    kind: str  # learn
     slug: str
     name: str
     description: str
@@ -75,7 +74,7 @@ class Collection:
 
 
 def parse_collection(text: str, path: Path, slug: str | None = None) -> Collection:
-    """A pack or learn course from its TOML text. Exercises that fail to parse are
+    """A learn module from its TOML text. Exercises that fail to parse are
     reported in Collection.errors; a file that cannot be read raises ExerciseError."""
     try:
         data = tomllib.loads(text)
@@ -83,7 +82,8 @@ def parse_collection(text: str, path: Path, slug: str | None = None) -> Collecti
         raise ExerciseError(f"{path.name} is not valid TOML: {e}") from None
     kinds = [kind for kind in KINDS if kind in data]
     if len(kinds) != 1:
-        raise ExerciseError(f"{path.name} needs one [pack] or [learn] table at the top")
+        hint = " ([pack] is now [learn])" if "pack" in data else ""
+        raise ExerciseError(f"{path.name} needs a [learn] table at the top{hint}")
     kind = kinds[0]
     meta = data[kind]
     slug = slug or slugify(meta.get("name", path.stem))
@@ -148,7 +148,7 @@ class Library:
         return [c for c in self.collections if c.kind == kind]
 
     def exercises(self) -> list[Exercise]:
-        """The base, then every pack and course."""
+        """The base, then every learn module."""
         return [*self.drill, *(ex for c in self.collections for ex in c.exercises)]
 
     def collection(self, name: str, kind: str | None = None) -> Collection | None:

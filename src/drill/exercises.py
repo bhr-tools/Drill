@@ -112,11 +112,11 @@ class Exercise:
     complexity: str | None = None  # the optimal complexity, in the notation of complexity.py
     scale: dict | None = None  # how to build an input of size n, to measure complexity
     explanation: str | None = None  # the theory, shown with the reference solution
-    pack: str | None = None  # the slug of the pack or learn course it comes from, if any
-    origin: str = "drill"  # drill (the base), pack or learn
-    # learn courses: the chapter, and the lesson read before the exercise
+    pack: str | None = None  # the slug of the learn module it comes from, if any
+    origin: str = "drill"  # drill (the base) or learn
+    # learn modules: the part it belongs to, and the place in the course it practises
     chapter: str | None = None
-    lesson: str | None = None
+    ref: str | None = None
     # "code" kind: the file the student edits, instead of the language's solution file
     # (flake.nix, module.nix…), and files written next to it (a project to package…)
     file: str | None = None
@@ -150,12 +150,12 @@ class Exercise:
         return lang in self.solutions if self.solutions else lang in GENERAL_LANGS
 
     def matches(self, query: str) -> bool:
-        """Search by a mode, an origin (drill, pack, learn), or a part of the id, the title or
+        """Search by a mode, an origin (drill, learn), or a part of the id, the title or
         a tag, ignoring case."""
         query = query.lower()
         if query in MODES:
             return self.mode == query
-        if query in ("drill", "pack", "learn"):
+        if query in ("drill", "learn"):
             return self.origin == query
         fields = [self.id, self.title.lower(), *self.tags]
         return any(query in f for f in fields)
@@ -268,7 +268,7 @@ def _parse_one(
         pack=pack,
         origin=origin,
         chapter=data.get("chapter"),
-        lesson=data.get("lesson"),
+        ref=data.get("ref"),
         variant=variant,
         files={relative_file(name): text for name, text in data.get("files", {}).items()},
     )

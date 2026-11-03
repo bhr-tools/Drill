@@ -3,12 +3,14 @@
 Rapid-fire coding exercises, solved in your own editor.
 
 Drill gives you one exercise at a time. You write the solution in your usual
-editor, and every time you save, the tests run. As soon as they pass, the next
-exercise starts. You never leave the keyboard, and you train with your own
+editor, and every time you save, the tests run. As soon as they pass, drill
+shows the reference solution, and the next exercise starts on `enter`. You never leave the keyboard, and you train with your own
 shortcuts, snippets and language server.
 
 ```
-$ drill sprint -l cpp -m 30
+$ drill                      # the whole base: reviews due first, then new exercises
+$ drill sprint -l cpp -m 30  # one mode, in C++, for 30 minutes
+$ drill learn automates      # a learn module: the practical work of a course
 ```
 
 ## The library
@@ -20,8 +22,7 @@ to it; drill refuses to start without it.
 ```
 drill/<theme>/<id>.toml   the base: exercises practised for good, one per file
                           (theme: shared, python, cpp, java, ocaml or nix)
-pack/<slug>.toml          packs: exercises aimed at one goal (a course, an exam)
-learn/<slug>.toml         learn courses: lessons and exercises, in order
+learn/<slug>.toml         learn modules: the practical work of a course, in order
 history/<machine>.jsonl   your history: one line per attempt, one file per machine
 ```
 
@@ -47,6 +48,8 @@ is only a local cache of these files, rebuilt when they change. The machine's
 name is its hostname, or `$DRILL_MACHINE`.
 
 ## Modes
+
+`drill` alone serves every mode; a mode narrows the session to it.
 
 - `drill sprint`: very short exercises (1–2 min targets). Idioms, classic
   patterns, the reflexes you want instant.
@@ -110,7 +113,7 @@ $ drill run two-sum#2            # always its second variant
 ```
 
 A query is an exact id, or else a part of an id, a title or a tag, a mode, or
-`drill`, `pack` or `learn`; an exercise must match every query that is not an
+`drill` or `learn`; an exercise must match every query that is not an
 exact id.
 
 Without `-l`, `drill run` uses your default language when the exercises
@@ -139,8 +142,6 @@ removed when the session ends.
 | `p` | pause the clock |
 | `r` | rerun the tests |
 | `o` | reopen the file in the editor |
-| `l` | reopen the lesson (learn courses) |
-| `a` | all the lessons of the course so far, in one document |
 | `c` | measure the complexity of your code (exercises that support it) |
 | `q` | quit |
 
@@ -183,69 +184,77 @@ Every addition goes through the same loop: drill writes the request, an AI
 writes the TOML, and drill checks it before filing it.
 
 ```
-$ drill prompt drill "an exercise I saw: ..."   # the request, copied
+$ drill prompt "an exercise I saw: ..."   # the request, copied
     → paste it to Claude, copy its reply
-$ drill add                                     # reads the clipboard, checks, files
+$ drill add                               # reads the clipboard, checks, files
     → if a check fails, the request to fix it is copied: paste it back, then add again
 ```
 
 | Request | For |
 |---|---|
-| `drill prompt drill "idea"` | one exercise for the base, from an idea or a statement seen elsewhere (or read from stdin). The AI picks the languages where it makes sense. |
-| `drill prompt pack` | a pack aimed at one goal, from your course material: attach the PDFs. `--topic` narrows the material to a part. |
-| `drill prompt learn` | a learn course, from your course material. The AI first replies with a plan (chapters, steps, and how many the material needs); once you approve it, it writes one chapter per reply, each appended to the course by `drill add`. A full lesson comes before each new concept. |
+| `drill prompt "idea"` | one exercise for the base, from an idea or a statement seen elsewhere (or read from stdin). The AI picks the languages where it makes sense. |
+| `drill prompt learn` | a learn module, from the course you attach (notes in Markdown, slides, lab sheets as PDFs). The AI replies with the whole module. |
 | `drill prompt variant <id>` | `-n` new variants of an exercise of the library. |
 
-Options: `-l nix,ocaml` the languages (for `pack` and `learn`, by default the ones the material's labs use, else `$DRILL_LANG`), `-L fr` the language of statements and
-lessons (default `$DRILL_LOCALE`, else English; code stays in English),
-`--no-material --topic "Nix flakes"` when there is no course to attach,
-`--print` to print the request instead of copying it.
+Options: `-l nix,ocaml` the languages (for `learn`, by default the ones the
+course uses, else `$DRILL_LANG`), `-L fr` the language of the statements
+(default `$DRILL_LOCALE`, else English; code stays in English), `--print` to
+print the request instead of copying it.
 
 `drill add` files what it gets by what it is: a single exercise in
 `drill/<its language>/` (`drill/shared/` when it has several, or `--to`), a
-`[pack]` in `pack/`, a `[learn]` in `learn/`, and `variant_of = "<id>"` with
-`[[variants]]` appended to that exercise in its own file, leaving the rest
-untouched. Something with the same id or name is replaced only after you
-confirm.
-
-From labs and tutorials, the AI keeps an exercise only when it makes a good
-exercise for the concept, made self-contained if needed, even when it is long;
-otherwise it writes a new one that trains the same skill better, and exercises in packs and courses may be long
-(up to 30 to 45 minutes) when the subject calls for it.
+`[learn]` in `learn/`, and `variant_of = "<id>"` with `[[variants]]` appended
+to that exercise in its own file, leaving the rest untouched. Something with
+the same id or name is replaced only after you confirm.
 
 `drill add file.toml` reads a file instead of the clipboard.
 
-`drill rm <id|pack|course>` deletes a file of the library. The history is kept,
-and git keeps the file.
+`drill rm <id|module>` deletes a file of the library. The history is kept, and
+git keeps the file.
 
-## Packs and learn courses
+## Learn modules
 
-```
-$ drill pack                 # asks which pack, if there are several
-$ drill pack graphs --mode hard -l cpp
-$ drill learn nix-flakes
-```
-
-A pack is scheduled like the base. A learn course is served in order: the next
-step unlocks once the current one is solved, and a step that introduces a
-concept opens its lesson (`LESSON.md`, in the editor) before the clock starts.
-Steps already solved come back for review, up to a third of the session.
-
-In a session, `l` reopens the lesson of the current step (for a step without
-one, the lesson it practises), and `a` opens every lesson reached so far in a
-single `COURSE.md`, a heading per chapter and step. Outside a session:
+A learn module is the practical work of a course, kept apart from the base:
+`drill` never serves it, `drill learn` does.
 
 ```
-$ drill lesson automates          # every lesson reached so far
-$ drill lesson automates 3        # the lesson of step 3
-$ drill lesson automates dfa-run  # or of a step named by its id or title
+$ drill prompt learn          # paste it, rewrite Behaviour if you want, attach your course
+$ drill add                   # the whole module
+$ drill learn automates       # reviews due first, then the exercises never done, in order
+$ drill list automates        # where you stand, part by part
 ```
 
-`examples/sorting-pack.toml` is a small example pack.
+The request opens with a short **Behaviour** paragraph, which says what the
+module is for. By default: the practical work of the course, every concept,
+algorithm and lab question that code can check, in the course's order, with
+lab questions that overlap merged. Replace it, once pasted, with a few lines of
+your own:
+
+> Follow the labs exactly, question by question, giving the code of the
+> previous questions as the starter.
+
+> Have me code each algorithm of the course, from the most naive to the most
+> efficient, one part per problem.
+
+The exercises come in parts (`chapter`), and each one cites the part of your
+course it trains: `cf. AUT - 01 · 5. Subset construction` under its title in a
+session, and on its sheet in `drill list`. Drill does not open the course; the
+reference is there for you to look it up. Modules carry no lessons: your course
+is the lesson.
+
+If the AI's reply is cut short, ask it to continue and `drill add` the rest: it
+is appended to the module.
+
+`examples/sorting-learn.toml` is a small example module.
 
 ## How drill schedules
 
 `drill help` prints this, and more.
+
+Every session serves first what is due for review, the most overdue first,
+then the exercises you have never done: in order in a learn module, at random
+in the base. When nothing is left, the session says so and ends. `drill run`
+goes on as long as you like, kata style.
 
 ```
 Levels and reviews (the Leitner system)
@@ -258,8 +267,7 @@ Levels and reviews (the Leitner system)
     over the target (up to 2×), or with the hint  down one level (1 at least)
     skipped, or over twice the target             back to 0: again this session
   So what you know comes back less and less often, and what resists comes back until
-  it no longer does. A session serves the exercises due first (about 70% of the time),
-  mixed with ones you have never done. An exercise is "known" from level 3.
+  it no longer does. An exercise is "known" from level 3.
 ```
 
 After each exercise, a line says what happened, e.g. `Within the target: level 2 → 3,
@@ -268,7 +276,7 @@ next review in 7 days.`
 ## Your progress
 
 ```
-$ drill list                 # the base, then your packs and courses
+$ drill list                 # the base, then your learn modules
 $ drill list nix --due       # the exercises about Nix due for review
 $ drill list -l ocaml --new  # the OCaml exercises never done
 $ drill list two-sum         # one exercise: its variants and your history
@@ -281,7 +289,7 @@ back. With `-l`, the progress is the one in those languages.
 
 `drill stats` compares your last 7 days with the 7 before, shows your daily
 practice over 30 days, how many exercises you know (level 3 or more) in the
-base and in each pack and course, the reviews of the coming week, your
+base and in each learn module, the reviews of the coming week, your
 time/target and its trend in each language (solve time over target: 1.0× is on
 target, lower is faster), and the tags and exercises that resist most.
 
@@ -290,7 +298,7 @@ The history is in the library, in `history/` (see [Syncing with git](#syncing-wi
 ## Tab completion
 
 The package installs completion for zsh and bash: commands, options, languages
-after `-l` (also after a comma), exercise ids, packs and courses. Elsewhere,
+after `-l` (also after a comma), exercise ids, learn modules. Elsewhere,
 `drill completion zsh` prints the script.
 
 ## Writing exercises

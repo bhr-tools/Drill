@@ -149,7 +149,7 @@ def weak_spots(rows, lib: Library) -> None:
 def show(store: Store, lib: Library) -> None:
     rows = store.attempts()
     if not rows:
-        print("No attempts yet. Start with `drill sprint`, `drill pack` or `drill learn`.")
+        print("No attempts yet. Start with `drill`, or `drill learn`.")
         return
     now = time.time()
     overview(rows, store)

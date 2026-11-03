@@ -59,13 +59,8 @@ def library_values(kind: str, prefix: str) -> list[tuple[str, str]]:
 
     try:
         lib = Library()
-        if kind in ("pack", "learn"):
+        if kind == "learn":
             return [(c.slug, c.name) for c in lib.of_kind(kind)]
-        if kind == "lessons":  # the steps with a lesson, by their id in the course
-            return [
-                (ex.id.split(":")[-1], f"{c.name}: {ex.title}")
-                for c in lib.of_kind("learn") for ex in c.exercises if ex.lesson
-            ]
         values = [(ex.id, ex.title) for ex in lib.exercises()]
         if kind == "any":
             values += [(c.slug, f"{c.kind}: {c.name}") for c in lib.collections]
@@ -108,10 +103,8 @@ def values_for(action: argparse.Action, parser: argparse.ArgumentParser, current
         return "__files__"
     if dest == "to":
         return "__dirs__"
-    if dest == "name" and command in ("pack", "learn", "lesson"):
-        return library_values("learn" if command == "lesson" else command, current)
-    if dest == "step":
-        return library_values("lessons", current)
+    if dest == "name" and command == "learn":
+        return library_values("learn", current)
     if dest == "queries" and command == "run" and "#" in current:
         return variant_values(current)
     if dest == "queries":

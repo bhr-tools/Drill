@@ -2,7 +2,8 @@
 
 A reply is one of:
 - a single exercise, its keys at the top level, filed in drill/<theme>/<id>.toml;
-- a [pack] or a [learn] course, filed in pack/ or learn/ under the slug of its name;
+- a [learn] module, filed in learn/ under the slug of its name (or, when it shares no
+  exercise with the module of that name, appended to it: the rest of a reply cut short);
 - new variants of an exercise (`variant_of = "<id>"` and [[variants]] tables), appended
   to that exercise in its file, without rewriting anything that is already there.
 """
@@ -97,11 +98,11 @@ def add(lib: Library, file: Path | None, to: str | None, force: bool) -> int:
         return reject([f"- the file is not valid TOML: {e}"])
     if "variant_of" in data:
         return add_variants(lib, text, data, force)
-    if "pack" in data or "learn" in data:
+    if "learn" in data or "pack" in data:
         return add_collection(lib, text, force)
     if "exercises" in data:
-        print(red("A file of [[exercises]] needs a [pack] or [learn] table."))
-        return reject(["- the file has [[exercises]] but no [pack] or [learn] table"])
+        print(red("A file of [[exercises]] needs a [learn] table."))
+        return reject(["- the file has [[exercises]] but no [learn] table"])
     return add_exercise(lib, text, data, to, force)
 
 
@@ -179,19 +180,21 @@ def add_collection(lib: Library, text: str, force: bool) -> int:
             print("Not added.")
             return 1
     write(lib, target, text)
-    print(f"Practise it with `drill {collection.kind} {collection.slug}`.")
+    print(f"Practise it with `drill learn {collection.slug}`.")
+    print(dim("If the AI's reply was cut short, ask it to continue, then `drill add` the rest."))
     return 0
 
 
 def add_chapter(
     lib: Library, course: Collection, text: str, chapter: Collection, force: bool
 ) -> int:
-    """Append the [[exercises]] of a reply to a learn course: its next chapter."""
+    """Append the [[exercises]] of a reply to a learn module: the rest of a reply cut short,
+    or more exercises for it."""
     lines = text.splitlines(keepends=True)
     starts = [i for i, name, array in headers(lines) if array and name == "exercises"]
     if not starts:
         print(red("The reply has no [[exercises]]."))
-        return reject(["- the chapter has no [[exercises]]"])
+        return reject(["- the reply has no [[exercises]]"])
     old_text = course.path.read_text()
     new_text = old_text + ("" if old_text.endswith("\n") else "\n") + "\n" + "".join(lines[starts[0]:])
     try:
@@ -201,16 +204,15 @@ def add_chapter(
         return reject([f"- {e}"])
     added = updated.exercises[len(course.exercises):]
     if len(added) != len(chapter.exercises):
-        print(red("The chapter could not be appended to the course safely."))
+        print(red("The reply could not be appended to the module safely."))
         return 1
-    print(dim(f"A new chapter for {course.slug}: steps {len(course.exercises) + 1} to "
+    print(dim(f"More for {course.slug}: exercises {len(course.exercises) + 1} to "
               f"{len(updated.exercises)}."))
     if (problems := checked(added, chapter.errors, force)) is not None:
         return reject(problems)
     course.path.write_text(new_text)
-    print(green(f"✓ {course.path.relative_to(lib.root)}: {len(updated.exercises)} steps "
+    print(green(f"✓ {course.path.relative_to(lib.root)}: {len(updated.exercises)} exercises "
                 f"(+{len(added)})"))
-    print("Answer \"next\" to the AI for the following chapter.")
     return 0
 
 

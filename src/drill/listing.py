@@ -26,7 +26,7 @@ MODE_HELP = {
 
 def select(exercises: list[Exercise], queries: list[str]) -> list[Exercise]:
     """Exercises named by an exact id, plus those matching every other query (a part of
-    an id, a title, a tag, a mode, or drill, pack, learn)."""
+    an id, a title, a tag, a mode, or drill, learn)."""
     exact = {q for q in queries if any(ex.id == q for ex in exercises)}
     rest = [q for q in queries if q not in exact]
     return [
@@ -87,8 +87,7 @@ def when(due: float | None, now: float) -> str:
     return yellow("now") if due <= now else f"in {ago(due - now)}"
 
 
-def row(ex: Exercise, p: Progress, now: float, short: bool, mark: str = " ") -> str:
-    """`mark`: a character before the name (▸ for the next step of a course)."""
+def row(ex: Exercise, p: Progress, now: float, short: bool) -> str:
     name = ex.id.split(":", 1)[1] if short and ":" in ex.id else ex.id
     variants = f"×{ex.n_variants}" if ex.n_variants > 1 else ""
     langs = " ".join(
@@ -96,9 +95,9 @@ def row(ex: Exercise, p: Progress, now: float, short: bool, mark: str = " ") -> 
     )
     best = fmt_time(p.best) if p.best else dim("—")
     return (
-        f"{mark} {name:30}{variants:>3}{fmt_time(ex.target):>6}{pad(best, 6, right=True)}"
+        f"  {name:30}{variants:>3}{fmt_time(ex.target):>6}{pad(best, 6, right=True)}"
         f"{p.tries or '':>6}  {level_bar(p.box)} {pad(when(p.due, now), 7)}"
-        f"  {langs}  {dim(' '.join(ex.tags))}{cyan('  lesson') if ex.lesson else ''}"
+        f"  {langs}  {dim(' '.join(ex.tags))}"
     )
 
 
@@ -113,18 +112,17 @@ def mastery(exercises: list[Exercise], prog: dict[str, Progress]) -> tuple[int, 
     return known, started, len(exercises)
 
 
-def collection_line(c: Collection, prog: dict[str, Progress], store: Store, now: float) -> str:
-    known, started, total = mastery(c.exercises, prog)
-    due = sum(1 for ex in c.exercises if (prog[ex.id].due or now + 1) <= now)
-    if c.kind == "learn":
-        done = store.passed()
-        steps = sum(ex.id in done for ex in c.exercises)
-        state = f"step {min(steps + 1, total)}/{total}" if steps < total else green("done")
-    else:
-        state = f"{known}/{total} known · {started - known} started"
-    parts = [state] + ([yellow(f"{due} due")] if due else [])
+def state(exercises: list[Exercise], prog: dict[str, Progress], now: float) -> str:
+    """Exercises done and known out of all, and those to work on again now."""
+    known, started, total = mastery(exercises, prog)
+    due = sum(1 for ex in exercises if (prog[ex.id].due or now + 1) <= now)
+    parts = [f"{started}/{total} done", f"{known} known"] + ([yellow(f"{due} due")] if due else [])
+    return " · ".join(parts)
+
+
+def collection_line(c: Collection, prog: dict[str, Progress], now: float) -> str:
     langs = ", ".join(c.langs())
-    return f"  {c.slug:30} {' · '.join(parts)}  {dim(langs)}"
+    return f"  {c.slug:30} {state(c.exercises, prog, now)}  {dim(langs)}"
 
 
 def show(
@@ -158,37 +156,28 @@ def show(
         if found:
             groups.append((f"{c.kind} {c.slug} — {c.name}", found, True))
     print(HEADER)
-    done = store.passed()
     for title, found, short in groups:
         print(bold(title))
         if found[0].origin == "learn":
-            course = next(c for c in lib.collections if c.slug == found[0].pack)
-            next_step = next((ex.id for ex in course.exercises if ex.id not in done), None)
-            chapter = None
+            parts: dict[str | None, list[Exercise]] = {}
             for ex in found:
-                if ex.chapter != chapter:
-                    chapter = ex.chapter
-                    print(cyan(f"  {chapter}") if chapter else "")
-                mark = yellow("▸") if ex.id == next_step else " "
-                print(row(ex, prog[ex.id], now, short, mark))
-            if next_step:
-                print(dim(f"  ▸ next step: {next_step} · "
-                          f"{sum(ex.id in done for ex in course.exercises)}/"
-                          f"{len(course.exercises)} done"))
+                parts.setdefault(ex.chapter, []).append(ex)
+            for part, exercises in parts.items():
+                if part:
+                    print(cyan(f"  {part}") + dim(f"  {state(exercises, prog, now)}"))
+                for ex in exercises:
+                    print(row(ex, prog[ex.id], now, short))
+            print(dim(f"  {state(found, prog, now)}"))
         else:
             for ex in found:
                 print(row(ex, prog[ex.id], now, short))
         print()
 
     if not queries and lib.collections:
-        for kind in ("pack", "learn"):
-            collections = lib.of_kind(kind)
-            if collections:
-                title = "packs" if kind == "pack" else "learn courses"
-                print(bold(title) + dim(f"  (drill list {kind} for their exercises)"))
-                for c in collections:
-                    print(collection_line(c, prog, store, now))
-                print()
+        print(bold("learn modules") + dim("  (drill list <name> for the exercises of one)"))
+        for c in lib.collections:
+            print(collection_line(c, prog, now))
+        print()
 
     n_due = sum(1 for ex in chosen if (prog[ex.id].due or now + 1) <= now)
     n_new = sum(1 for ex in chosen if prog[ex.id].new)
@@ -214,6 +203,8 @@ def sheet(ex: Exercise, lib: Library, store: Store, langs: list[str] | None) -> 
                                f"  ·  {where}"))
     supported = [key for key in LANGUAGES if any(i.supports(key) for i in ex.instances)]
     print(dim(f"languages {', '.join(supported)}  ·  tags {', '.join(ex.tags) or '—'}"))
+    if ex.ref:
+        print(dim(f"cf. {ex.ref}"))
     print()
     statement = textwrap.dedent(ex.statement).strip().splitlines()
     for line in statement[:6]:

@@ -16,14 +16,13 @@ from pathlib import Path
 from . import term
 from .complexity import CLASSES, Measurement, measure, report
 from .exercises import Exercise
+from .library import Collection
 from .langs import Language, Outcome
 from .store import INTERVALS, Card, Store, grade, pick
 from .term import bold, cyan, dim, fmt_time, green, red, yellow
 
 KEYS_HELP = "[h]int [s]kip [p]ause [r]erun [o]pen [q]uit"
 COMPLEXITY_KEY = "[c]omplexity "
-LESSON_KEY = "[l]esson "
-COURSE_KEY = "[a]ll lessons "
 
 
 def open_in_editor(editor: str, path: Path) -> bool:
@@ -168,11 +167,11 @@ class Session:
         editor: str | None,
         minutes: float | None,
         keep: bool,
-        course=None,
+        course: Collection | None = None,
     ):
         """A session over `exercises` (a mode's, or a search's), named `name` in the history.
 
-        `course`, a learn.Course, serves them in its order instead of by review dates.
+        `course`, a learn module, serves its new exercises in the file's order.
         """
         self.course = course
         self.name = name
@@ -203,8 +202,14 @@ class Session:
         try:
             with term.Keys() as self.keys:
                 while self.deadline is None or time.monotonic() < self.deadline:
-                    choose = self.course.pick if self.course else pick
-                    ex, lang = choose(self.pool, self.store.cards(), recent)
+                    pair = pick(
+                        self.pool, self.store.cards(), recent,
+                        in_order=self.course is not None, ahead=self.name == "run",
+                    )
+                    if pair is None:
+                        term.say(green("Nothing left to practise for now: all done until the next reviews."))
+                        break
+                    ex, lang = pair
                     recent.append(ex.id)
                     number += 1
                     if not self.play(number, self.choose_variant(ex, lang), lang):
@@ -242,28 +247,14 @@ class Session:
         if path.name != lang.filename:
             self.laid_out.append(path)
         path.write_text(lang.starter(ex))
-        lesson = self.lesson_of(ex)
-        if lesson is not None:
-            (self.dir / "LESSON.md").write_text(textwrap.dedent(lesson.lesson).strip() + "\n")
-            self.laid_out.append(self.dir / "LESSON.md")
-        if self.course:
-            # Every lesson reached so far, to look back at another concept
-            (self.dir / "COURSE.md").write_text(self.course.notes())
-            self.laid_out.append(self.dir / "COURSE.md")
         return path
 
-    def lesson_of(self, ex: Exercise) -> Exercise | None:
-        """The step whose lesson goes with `ex`: in a course, the last lesson before a step
-        that has none."""
-        return self.course.lesson_for(ex) if self.course else ex if ex.lesson else None
-
-    def read_lesson(self, ex: Exercise) -> bool:
-        """Open the lesson of a new step, and wait until it is read. False to quit."""
-        lesson = self.dir / "LESSON.md"
-        term.say(cyan(f"New concept: read the lesson first ({lesson})."))
-        self.open_editor(lesson)
-        term.status(dim("[enter] start the exercise and the clock  [q] quit"))
-        return self.keys.wait("\n q") != "q"
+    def step_label(self, ex: Exercise, card: Card | None) -> str:
+        """Where `ex` stands in its learn module: its part, its rank, new or a review."""
+        steps = [step.id for step in self.course.exercises]
+        rank = f"{steps.index(ex.id) + 1}/{len(steps)}" if ex.id in steps else ""
+        kind = "new" if card is None else "review"
+        return " · ".join(filter(None, [ex.chapter, rank, kind]))
 
     def play(self, number: int, ex: Exercise, lang: Language) -> bool:
         """Run one exercise until it is solved or skipped. Returns False to end the session."""
@@ -273,7 +264,7 @@ class Session:
         card = self.store.card(ex.id, lang.key)
         best = card.best if card else None
         runs, hinted, report = 0, False, []
-        step = f"{self.course.label(ex)}   " if self.course else ""
+        step = self.step_label(ex, card) if self.course else ""
 
         def redraw() -> None:
             term.clear()
@@ -287,6 +278,8 @@ class Session:
                 + dim(f"   {lang.label} · target {fmt_time(ex.target)} · {record}")
                 + dim(f" · {level}" if level else "") + dim(variant)
             )
+            if ex.ref:
+                term.say(dim(f"cf. {ex.ref}"))
             term.say(dim(str(path)))
             term.say()
             if hinted:
@@ -297,11 +290,6 @@ class Session:
 
         redraw()
         self.open_editor(path)
-        # A step of a course not solved yet: its lesson comes first, wherever it is served
-        if ex.lesson and ex.id not in self.store.passed():
-            if not self.read_lesson(ex):
-                return False
-            redraw()
         watcher, clock = Watcher(path), Clock()
         while True:
             term.status(self.status_line(clock.elapsed(), ex, lang))
@@ -310,10 +298,6 @@ class Session:
                 return False
             if key == "o":
                 self.open_editor(path)
-            elif key == "l" and self.lesson_of(ex):
-                self.open_editor(self.dir / "LESSON.md")
-            elif key == "a" and self.course:
-                self.open_editor(self.dir / "COURSE.md")
             elif key == "c" and ex.scale and lang.measurable:
                 clock.pause()  # a detour to learn from, not part of the solving time
                 lines = self.estimate(ex, lang, path)
@@ -434,11 +418,7 @@ class Session:
         parts = [colour(f"⏱ {fmt_time(elapsed)}") + dim(f" / {fmt_time(target)}")]
         if self.deadline:
             parts.append(dim(f"session {fmt_time(max(0.0, self.deadline - time.monotonic()))} left"))
-        keys = (
-            (COMPLEXITY_KEY if ex.scale and lang.measurable else "")
-            + (LESSON_KEY if self.lesson_of(ex) else "")
-            + (COURSE_KEY if self.course else "")
-        )
+        keys = COMPLEXITY_KEY if ex.scale and lang.measurable else ""
         parts.append(dim(keys + KEYS_HELP))
         return "   ".join(parts)
 

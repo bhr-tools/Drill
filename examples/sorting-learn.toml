@@ -1,9 +1,11 @@
-[pack]
+[learn]
 name = "Sorting and searching"
-description = "Example pack: elementary sorts, binary search and its variants, merge sort and heaps, as an introductory algorithms course teaches them."
+description = "Example learn module: elementary sorts, binary search and its variants, merge sort and heaps, as an introductory algorithms course teaches them."
 
 [[exercises]]
+chapter = "1. Elementary sorts"
 id = "insertion-sort"
+ref = "Algorithms · 2.1 Elementary sorts"
 mode = "sprint"
 title = "Insertion sort"
 tags = ["sorting", "insertion-sort"]
@@ -49,7 +51,9 @@ vector<int> insertionSort(vector<int>& nums) {
 '''
 
 [[exercises]]
+chapter = "2. Binary search"
 id = "lower-bound"
+ref = "Algorithms · 1.1 Binary search"
 mode = "sprint"
 title = "Lower bound"
 tags = ["binary-search"]
@@ -94,7 +98,9 @@ int lowerBound(vector<int>& nums, int x) {
 '''
 
 [[exercises]]
+chapter = "3. Divide and conquer"
 id = "count-inversions"
+ref = "Algorithms · 2.2 Mergesort"
 mode = "normal"
 title = "Counting inversions"
 tags = ["merge-sort", "divide-and-conquer"]
@@ -183,6 +189,7 @@ in = "[[rng.randint(-10**9, 10**9) for _ in range(n)]]"
 
 [[exercises]]
 id = "kth-smallest"
+ref = "Algorithms · 2.3 Quicksort, selection"
 mode = "normal"
 title = "k-th smallest with a heap"
 tags = ["heaps", "selection"]
@@ -237,7 +244,9 @@ int kthSmallest(vector<int>& nums, int k) {
 '''
 
 [[exercises]]
+chapter = "4. Priority queues"
 id = "min-heap"
+ref = "Algorithms · 2.4 Binary heaps"
 mode = "hard"
 kind = "code"
 title = "A binary min-heap"
@@ -422,7 +431,9 @@ private:
 '''
 
 [[exercises]]
+chapter = "5. Ordered arrays"
 id = "dedupe-sorted"
+ref = "Algorithms · 3.1 Ordered arrays"
 mode = "optim"
 title = "Distinct values"
 tags = ["sorting", "hashing"]

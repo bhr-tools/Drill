@@ -14,11 +14,10 @@ from .checking import check, copy_to_clipboard
 from .exercises import MODES, Exercise
 from .help import HELP
 from .langs import ALIASES, LANGUAGES, Language
-from .learn import Course
 from .library import Collection, Library, LibraryError
 from .listing import MODE_HELP, select
-from .session import Session, open_in_editor
-from .store import Store, data_dir
+from .session import Session
+from .store import Store
 from .term import bold, cyan, dim, red
 
 
@@ -74,60 +73,36 @@ def add_prompt_options(
         p.add_argument(
             "-L", "--locale", choices=list(prompt.LOCALES),
             default=os.environ.get("DRILL_LOCALE", "en"),
-            help="language of the statements and lessons (default: $DRILL_LOCALE or en)",
+            help="language of the statements (default: $DRILL_LOCALE or en)",
         )
     p.add_argument("--print", action="store_true", help="print the prompt instead of copying it")
-
-
-def add_material_options(p: argparse.ArgumentParser) -> None:
-    p.add_argument("--topic", help="the part of the material to cover, or the subject without it")
-    p.add_argument(
-        "--no-material", action="store_true",
-        help="no course material attached: the AI works from --topic alone",
-    )
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="drill", description="Rapid-fire coding exercises, solved in your own editor.",
-        epilog="`drill help` explains levels, reviews, variants, packs and courses.",
+        epilog="`drill` alone practises the whole base. `drill help` explains how drill works.",
     )
     sub = parser.add_subparsers(dest="command", required=True)
+    p = sub.add_parser("all", help="the whole base, every mode (what `drill` alone runs)",
+                       description="Start a session on the whole base.")
+    add_session_options(p, os.environ.get("DRILL_LANG", "python"))
     for mode in MODES:
         p = sub.add_parser(mode, help=MODE_HELP[mode], description=f"Start a session of {MODE_HELP[mode]}.")
         add_session_options(p, os.environ.get("DRILL_LANG", "python"))
 
     p = sub.add_parser(
-        "pack", help="practise a pack", description="Practise a pack (asks which one without a name).",
+        "learn", help="practise a learn module",
+        description="Practise a learn module: the reviews due first, then the exercises "
+                    "never done, in the module's order.",
     )
-    p.add_argument("name", nargs="?", help="the pack's name, or a part of it")
-    p.add_argument("--mode", choices=MODES, help="only this mode (default: all)")
+    p.add_argument("name", nargs="?", help="the module's name, or a part of it")
     add_session_options(p, None)
-
-    p = sub.add_parser(
-        "learn", help="follow a learn course",
-        description="Follow a learn course: its steps in order, with reviews of the steps done.",
-    )
-    p.add_argument("name", nargs="?", help="the course's name, or a part of it")
-    add_session_options(p, None)
-
-    p = sub.add_parser(
-        "lesson", help="read a course's lessons again",
-        description="Open the lessons of a learn course reached so far, as one document, or "
-                    "the lesson of one step (its number, or a part of its id or title).",
-    )
-    p.add_argument("name", nargs="?", help="the course's name, or a part of it")
-    p.add_argument("step", nargs="?", help="a step: its number, or a part of its id or title")
-    p.add_argument(
-        "-e", "--editor", default=default_editor(),
-        help="command that opens the lessons, or none to print them "
-             "(default: $DRILL_EDITOR, else code when available)",
-    )
 
     p = sub.add_parser(
         "run", help="practise chosen exercises",
         description="Start a session on the exercises named by an exact id, or matching every "
-                    "other query (a part of an id, a title, a tag, a mode, drill, pack, learn). "
+                    "other query (a part of an id, a title, a tag, a mode, drill, learn). "
                     "id#2 always serves the exercise's second variant. "
                     "A single exercise repeats, kata style.",
     )
@@ -137,7 +112,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser(
         "list", help="the exercises and your progress on each",
         description="List the exercises named by an exact id, or matching every query (a part "
-                    "of an id, a title, a tag, a mode, drill, pack, learn), with your progress. "
+                    "of an id, a title, a tag, a mode, drill, learn), with your progress. "
                     "A single match shows its sheet: variants and history.",
         epilog="`drill help` explains levels and reviews.",
     )
@@ -151,7 +126,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser(
         "prompt", help="the request to send an AI for new exercises",
-        description="Copy the request to send an AI. Its reply goes through `drill add`.",
+        description="Copy the request to send an AI. Its reply goes through `drill add`. "
+                    "`drill prompt \"idea\"` is short for `drill prompt drill \"idea\"`.",
     )
     kinds = p.add_subparsers(dest="kind", required=True)
     pp = kinds.add_parser(
@@ -159,16 +135,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     pp.add_argument("idea", nargs="*", help="the idea or the statement (default: read stdin)")
     add_prompt_options(pp, "mix", locale=False)
-    pp = kinds.add_parser("pack", help="a pack aimed at one goal, from your course material")
-    pp.add_argument("-n", "--count", type=int, default=20, help="number of exercises (default: 20)")
-    add_material_options(pp)
-    add_prompt_options(pp, None)
     pp = kinds.add_parser(
-        "learn", help="a course to learn a subject step by step, with lessons",
-        description="The AI first plans the course from the material (chapters, steps, their "
-                    "number), then writes it one chapter per reply, each added with `drill add`.",
+        "learn", help="a learn module: the practical work of a course, from your material",
+        description="The prompt opens with a Behaviour paragraph: replace it, once pasted, to "
+                    "say what the module is for. The AI replies with the whole module.",
     )
-    add_material_options(pp)
     add_prompt_options(pp, None)
     pp = kinds.add_parser("variant", help="new variants of an exercise of the library")
     pp.add_argument("id", help="the exercise's id")
@@ -177,7 +148,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser(
         "add", help="check an AI's reply, then file it in the library",
-        description="Check an exercise, pack, course or variants (from the clipboard, or a file),"
+        description="Check an exercise, a learn module or variants (from the clipboard, or a file),"
                     " then file it in the library.",
     )
     p.add_argument("file", type=Path, nargs="?", help="a TOML file (default: the clipboard)")
@@ -185,8 +156,8 @@ def build_parser() -> argparse.ArgumentParser:
                    "(default: drill/<its language>, or drill/shared)")
     p.add_argument("--force", action="store_true", help="add it even if some checks fail")
 
-    p = sub.add_parser("rm", help="remove an exercise, a pack or a course from the library")
-    p.add_argument("target", help="an exercise id, or a pack's or course's name")
+    p = sub.add_parser("rm", help="remove an exercise or a learn module from the library")
+    p.add_argument("target", help="an exercise id, or a learn module's name")
     p.add_argument("-y", "--yes", action="store_true", help="do not ask for confirmation")
 
     p = sub.add_parser("check", help="verify the reference solutions against their tests")
@@ -196,50 +167,8 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("completion", help="the shell completion script")
     p.add_argument("shell", choices=list(completion.SCRIPTS))
 
-    sub.add_parser("help", help="how drill works: levels, reviews, variants, packs, courses")
+    sub.add_parser("help", help="how drill works: reviews, levels, variants, learn modules")
     return parser
-
-
-def lesson_command(args, lib: Library, store: Store) -> int:
-    """Open a course's lessons, or one step's, outside a session."""
-    collection = choose(lib.of_kind("learn"), "learn", args.name)
-    if collection is None:
-        return 1
-    course = Course(collection, store)
-    name = collection.slug
-    if args.step is None:
-        text = course.notes()
-    else:
-        step = find_step(course, args.step)
-        lesson = step and course.lesson_for(step)
-        if lesson is None:
-            print(red(f"No lesson for {args.step!r} in {collection.name}."))
-            return 1
-        text, name = course.notes([lesson]), f"{name}-{lesson.id.split(':')[-1]}"
-    if not text:
-        print(f"No lesson read yet in {collection.name}.")
-        return 1
-    editor = None if args.editor in ("", "none") else args.editor
-    if editor:
-        path = data_dir() / "lessons" / f"{name}.md"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text)
-        if open_in_editor(editor, path):
-            print(dim(f"Opened {path}"))
-            return 0
-    print(text)
-    return 0
-
-
-def find_step(course: Course, query: str) -> Exercise | None:
-    """The step numbered `query`, or the first whose id or title contains it."""
-    if query.isdigit():
-        index = int(query) - 1
-        return course.steps[index] if 0 <= index < len(course.steps) else None
-    query = query.lower()
-    return next(
-        (ex for ex in course.steps if query in ex.id.lower() or query in ex.title.lower()), None
-    )
 
 
 def pinned_variant(exercises: list[Exercise], query: str) -> Exercise | None:
@@ -259,7 +188,7 @@ def pinned_variant(exercises: list[Exercise], query: str) -> Exercise | None:
 
 
 def run_session(
-    parser, args, store: Store, name: str, chosen: list[Exercise], course: Course | None = None
+    parser, args, store: Store, name: str, chosen: list[Exercise], course: Collection | None = None
 ) -> Session:
     if not sys.stdin.isatty():
         parser.error("a session needs an interactive terminal")
@@ -300,28 +229,23 @@ def choose(collections: list[Collection], kind: str, name: str | None) -> Collec
         return None
 
 
-def show_prompt(text: str, printed: bool, attach: bool, learn: bool = False) -> None:
+def show_prompt(text: str, printed: bool, learn: bool = False) -> None:
     if printed or not copy_to_clipboard(text):
         print(text)
         first = "That was the prompt."
     else:
         first = "The prompt is in the clipboard."
-    paste = "1. Paste it to Claude" + (", and attach your course material (PDFs)." if attach else ".")
     if learn:
         steps = [
             first,
-            paste + " It replies with the plan of the course.",
-            "2. Ask for changes if you want, then approve it: it sends the first chapter.",
-            "3. Copy each chapter, run `drill add` (it is appended to the course), then answer",
-            "   \"next\". If something is wrong, the request to fix it is copied: paste it back.",
+            "1. Paste it to Claude. Rewrite its Behaviour paragraph if you want another kind of",
+            "   module, and attach your course (notes, slides, lab sheets: .md or PDF).",
+            "2. Copy its reply, then run `drill add`. If the reply was cut short, ask it to",
+            "   continue, and `drill add` the rest: it is appended to the module.",
         ]
     else:
-        steps = [
-            first,
-            paste,
-            "2. Copy its reply, then run `drill add`: it checks the reply and files it.",
-            "   If something is wrong, the request to fix it is copied for you: paste it back.",
-        ]
+        steps = [first, "1. Paste it to Claude.", "2. Copy its reply, then run `drill add`."]
+    steps.append("   If something is wrong, the request to fix it is copied for you: paste it back.")
     print(cyan("\n".join(steps)), file=sys.stderr)
 
 
@@ -336,32 +260,35 @@ def prompt_command(parser, args, lib_or_none) -> int:
         ex, path = found
         langs = [key for key in LANGUAGES if any(i.supports(key) for i in ex.instances)]
         text = prompt.build_variant(adding.exercise_text(ex, path), ex.id, langs, args.count)
-        show_prompt(text, args.print, attach=False)
+        show_prompt(text, args.print)
         return 0
     langs = [lang.key for lang in args.lang] if args.lang else None
-    fallback = os.environ.get("DRILL_LANG", "python")
     if kind == "drill":
         idea = " ".join(args.idea) or (sys.stdin.read() if not sys.stdin.isatty() else "")
         if not idea.strip():
-            parser.error("describe the exercise: drill prompt drill \"...\" (or through stdin)")
-        show_prompt(prompt.build_drill(langs, idea), args.print, attach=False)
+            parser.error("describe the exercise: drill prompt \"...\" (or through stdin)")
+        show_prompt(prompt.build_drill(langs, idea), args.print)
         return 0
-    material = not args.no_material
-    if not material and not args.topic:
-        parser.error("--no-material needs --topic: the subject to cover")
-    if kind == "pack":
-        text = prompt.build_pack(
-            langs, args.count, args.locale, material, args.topic, fallback
-        )
-    else:
-        text = prompt.build_learn(langs, args.locale, material, args.topic, fallback)
-    show_prompt(text, args.print, attach=material, learn=kind == "learn")
+    fallback = os.environ.get("DRILL_LANG", "python")
+    show_prompt(prompt.build_learn(langs, args.locale, fallback), args.print, learn=True)
     return 0
+
+
+def implicit(argv: list[str]) -> list[str]:
+    """The command left out: `drill` alone practises the whole base, and `drill prompt
+    "idea"` asks for one exercise."""
+    if argv[:1] == ["prompt"] and argv[1:2] not in (["drill"], ["learn"], ["variant"], ["-h"],
+                                                    ["--help"]):
+        return ["prompt", "drill", *argv[1:]]
+    if not argv or (argv[0].startswith("-") and argv[0] not in ("-h", "--help")):
+        return ["all", *argv]
+    return argv
 
 
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     parser = build_parser()
+    argv = implicit(argv)
     if argv[:1] == ["__complete"]:
         shell, position, *words = argv[1:]
         print(completion.complete(parser, shell, int(position), words))
@@ -382,7 +309,7 @@ def main(argv: list[str] | None = None) -> int:
             raise SystemExit(f"drill: {e}") from None
         return lib
 
-    sessions = (*MODES, "run", "pack", "learn")
+    sessions = ("all", *MODES, "run", "learn")
     if command == "prompt" and args.kind != "variant":
         return prompt_command(parser, args, library)
     root = library().root
@@ -407,8 +334,6 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         sync.push(root, f"{session.name} session, {session.n_solved} solved")
         return 0
-    if command == "lesson":
-        return lesson_command(args, lib, store)
     if command == "list":
         langs = [lang.key for lang in args.lang] if args.lang else None
         return listing.show(lib, store, args.queries, langs, args.due, args.new)
@@ -431,8 +356,8 @@ def main(argv: list[str] | None = None) -> int:
 def start(parser, args, lib: Library, store: Store) -> Session | None:
     """Run the session a command asks for; None if there is nothing to practise."""
     command = args.command
-    if command in MODES:
-        chosen = [ex for ex in lib.drill if ex.mode == command]
+    if command == "all" or command in MODES:
+        chosen = [ex for ex in lib.drill if command in ("all", ex.mode)]
         return run_session(parser, args, store, command, chosen)
     if command == "run":
         exercises = lib.exercises()
@@ -450,11 +375,9 @@ def start(parser, args, lib: Library, store: Store) -> Session | None:
     collection = choose(lib.of_kind(command), command, args.name)
     if collection is None:
         return None
-    chosen = collection.exercises
-    if command == "pack" and args.mode:
-        chosen = [ex for ex in chosen if ex.mode == args.mode]
-    if not chosen:
+    if not collection.exercises:
         print(red(f"{collection.slug} has no exercises to practise."))
         return None
-    course = Course(collection, store) if command == "learn" else None
-    return run_session(parser, args, store, f"{command}:{collection.slug}", chosen, course)
+    return run_session(
+        parser, args, store, f"learn:{collection.slug}", collection.exercises, collection
+    )
