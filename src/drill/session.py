@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 import random
 import shlex
 import shutil
@@ -21,10 +20,24 @@ from .langs import Language, Outcome
 from .store import INTERVALS, Card, Store, grade, pick
 from .term import bold, cyan, dim, fmt_time, green, red, yellow
 
-COUNTDOWN = 3  # seconds before the next exercise starts
 KEYS_HELP = "[h]int [s]kip [p]ause [r]erun [o]pen [q]uit"
 COMPLEXITY_KEY = "[c]omplexity "
 LESSON_KEY = "[l]esson "
+COURSE_KEY = "[a]ll lessons "
+
+
+def open_in_editor(editor: str, path: Path) -> bool:
+    """Open `path` in the editor, without waiting for it. False if it cannot start."""
+    try:
+        subprocess.Popen(
+            [*shlex.split(editor), str(path)],
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except OSError as e:
+        term.say(red(f"Cannot start the editor ({e}); open {path} yourself."))
+        return False
+    return True
 
 
 def level_note(before: Card | None, after: Card, reason: str) -> str:
@@ -229,11 +242,20 @@ class Session:
         if path.name != lang.filename:
             self.laid_out.append(path)
         path.write_text(lang.starter(ex))
-        if ex.lesson:
-            lesson = self.dir / "LESSON.md"
-            lesson.write_text(textwrap.dedent(ex.lesson).strip() + "\n")
-            self.laid_out.append(lesson)
+        lesson = self.lesson_of(ex)
+        if lesson is not None:
+            (self.dir / "LESSON.md").write_text(textwrap.dedent(lesson.lesson).strip() + "\n")
+            self.laid_out.append(self.dir / "LESSON.md")
+        if self.course:
+            # Every lesson reached so far, to look back at another concept
+            (self.dir / "COURSE.md").write_text(self.course.notes())
+            self.laid_out.append(self.dir / "COURSE.md")
         return path
+
+    def lesson_of(self, ex: Exercise) -> Exercise | None:
+        """The step whose lesson goes with `ex`: in a course, the last lesson before a step
+        that has none."""
+        return self.course.lesson_for(ex) if self.course else ex if ex.lesson else None
 
     def read_lesson(self, ex: Exercise) -> bool:
         """Open the lesson of a new step, and wait until it is read. False to quit."""
@@ -288,8 +310,10 @@ class Session:
                 return False
             if key == "o":
                 self.open_editor(path)
-            elif key == "l" and ex.lesson:
+            elif key == "l" and self.lesson_of(ex):
                 self.open_editor(self.dir / "LESSON.md")
+            elif key == "a" and self.course:
+                self.open_editor(self.dir / "COURSE.md")
             elif key == "c" and ex.scale and lang.measurable:
                 clock.pause()  # a detour to learn from, not part of the solving time
                 lines = self.estimate(ex, lang, path)
@@ -349,34 +373,7 @@ class Session:
         term.say()
         term.say(line)
         term.say(dim(level_note(before, card, grade_reason(seconds, ex.target, hinted, False))))
-        if ex.mode == "optim" and ex.explanation:
-            # Understanding why the new version is faster is the point: no countdown
-            term.say()
-            for text in explanation_lines(ex):
-                term.say(text)
-            term.status(dim("[v] reference solution  [enter] next exercise  [q] quit"))
-            key = self.keys.wait("\n qv")
-            return self.reveal(ex, lang, explain=False) if key == "v" else key != "q"
-        return self.countdown(ex, lang)
-
-    def countdown(self, ex: Exercise, lang: Language) -> bool:
-        end = time.monotonic() + COUNTDOWN
-        while (left := end - time.monotonic()) > 0:
-            term.status(
-                dim(f"Next in {math.ceil(left)}s   [v] reference solution  [p] hold  "
-                    "[enter] go  [q] quit")
-            )
-            key = self.keys.get(0.1)
-            if key in ("\n", " "):
-                return True
-            if key == "q":
-                return False
-            if key == "v":
-                return self.reveal(ex, lang)
-            if key == "p":
-                term.status(dim("[enter] next exercise  [q] quit"))
-                return self.keys.wait("\n q") != "q"
-        return True
+        return self.reveal(ex, lang)
 
     def reveal(self, ex: Exercise, lang: Language, explain: bool = True) -> bool:
         code = ex.solutions.get(lang.key)
@@ -437,21 +434,16 @@ class Session:
         parts = [colour(f"⏱ {fmt_time(elapsed)}") + dim(f" / {fmt_time(target)}")]
         if self.deadline:
             parts.append(dim(f"session {fmt_time(max(0.0, self.deadline - time.monotonic()))} left"))
-        keys = (COMPLEXITY_KEY if ex.scale and lang.measurable else "") + (LESSON_KEY if ex.lesson else "")
+        keys = (
+            (COMPLEXITY_KEY if ex.scale and lang.measurable else "")
+            + (LESSON_KEY if self.lesson_of(ex) else "")
+            + (COURSE_KEY if self.course else "")
+        )
         parts.append(dim(keys + KEYS_HELP))
         return "   ".join(parts)
 
     def open_editor(self, path: Path) -> None:
-        if not self.editor:
-            return
-        try:
-            subprocess.Popen(
-                [*shlex.split(self.editor), str(path)],
-                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                start_new_session=True,
-            )
-        except OSError as e:
-            term.say(red(f"Cannot start the editor ({e}); open {path} yourself."))
+        if self.editor and not open_in_editor(self.editor, path):
             self.editor = None
 
     def summary(self) -> None:

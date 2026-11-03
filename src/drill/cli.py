@@ -6,6 +6,7 @@ import argparse
 import os
 import shutil
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 from . import adding, completion, listing, prompt, stats, sync
@@ -16,8 +17,8 @@ from .langs import ALIASES, LANGUAGES, Language
 from .learn import Course
 from .library import Collection, Library, LibraryError
 from .listing import MODE_HELP, select
-from .session import Session
-from .store import Store
+from .session import Session, open_in_editor
+from .store import Store, data_dir
 from .term import bold, cyan, dim, red
 
 
@@ -111,9 +112,23 @@ def build_parser() -> argparse.ArgumentParser:
     add_session_options(p, None)
 
     p = sub.add_parser(
+        "lesson", help="read a course's lessons again",
+        description="Open the lessons of a learn course reached so far, as one document, or "
+                    "the lesson of one step (its number, or a part of its id or title).",
+    )
+    p.add_argument("name", nargs="?", help="the course's name, or a part of it")
+    p.add_argument("step", nargs="?", help="a step: its number, or a part of its id or title")
+    p.add_argument(
+        "-e", "--editor", default=default_editor(),
+        help="command that opens the lessons, or none to print them "
+             "(default: $DRILL_EDITOR, else code when available)",
+    )
+
+    p = sub.add_parser(
         "run", help="practise chosen exercises",
         description="Start a session on the exercises named by an exact id, or matching every "
                     "other query (a part of an id, a title, a tag, a mode, drill, pack, learn). "
+                    "id#2 always serves the exercise's second variant. "
                     "A single exercise repeats, kata style.",
     )
     p.add_argument("queries", nargs="+", metavar="query")
@@ -183,6 +198,64 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("help", help="how drill works: levels, reviews, variants, packs, courses")
     return parser
+
+
+def lesson_command(args, lib: Library, store: Store) -> int:
+    """Open a course's lessons, or one step's, outside a session."""
+    collection = choose(lib.of_kind("learn"), "learn", args.name)
+    if collection is None:
+        return 1
+    course = Course(collection, store)
+    name = collection.slug
+    if args.step is None:
+        text = course.notes()
+    else:
+        step = find_step(course, args.step)
+        lesson = step and course.lesson_for(step)
+        if lesson is None:
+            print(red(f"No lesson for {args.step!r} in {collection.name}."))
+            return 1
+        text, name = course.notes([lesson]), f"{name}-{lesson.id.split(':')[-1]}"
+    if not text:
+        print(f"No lesson read yet in {collection.name}.")
+        return 1
+    editor = None if args.editor in ("", "none") else args.editor
+    if editor:
+        path = data_dir() / "lessons" / f"{name}.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+        if open_in_editor(editor, path):
+            print(dim(f"Opened {path}"))
+            return 0
+    print(text)
+    return 0
+
+
+def find_step(course: Course, query: str) -> Exercise | None:
+    """The step numbered `query`, or the first whose id or title contains it."""
+    if query.isdigit():
+        index = int(query) - 1
+        return course.steps[index] if 0 <= index < len(course.steps) else None
+    query = query.lower()
+    return next(
+        (ex for ex in course.steps if query in ex.id.lower() or query in ex.title.lower()), None
+    )
+
+
+def pinned_variant(exercises: list[Exercise], query: str) -> Exercise | None:
+    """The variant `id#n` names (#1 is the exercise itself), alone, so the session serves it
+    every time; its attempts still count on the exercise's schedule."""
+    id, _, number = query.rpartition("#")
+    ex = next((ex for ex in exercises if ex.id == id), None)
+    if ex is None:
+        print(red(f"No exercise {id}. Try `drill list`."))
+        return None
+    if not number.isdigit() or not 1 <= int(number) <= ex.n_variants:
+        print(red(f"{id} has {ex.n_variants} variant{'s' * (ex.n_variants > 1)}: "
+                  f"#1 to #{ex.n_variants}."))
+        return None
+    chosen = ex.instances[int(number) - 1]
+    return replace(chosen, variants=())
 
 
 def run_session(
@@ -334,6 +407,8 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         sync.push(root, f"{session.name} session, {session.n_solved} solved")
         return 0
+    if command == "lesson":
+        return lesson_command(args, lib, store)
     if command == "list":
         langs = [lang.key for lang in args.lang] if args.lang else None
         return listing.show(lib, store, args.queries, langs, args.due, args.new)
@@ -360,7 +435,14 @@ def start(parser, args, lib: Library, store: Store) -> Session | None:
         chosen = [ex for ex in lib.drill if ex.mode == command]
         return run_session(parser, args, store, command, chosen)
     if command == "run":
-        chosen = select(lib.exercises(), args.queries)
+        exercises = lib.exercises()
+        pinned = [q for q in args.queries if "#" in q]
+        chosen = select(exercises, [q for q in args.queries if q not in pinned])
+        for query in pinned:
+            ex = pinned_variant(exercises, query)
+            if ex is None:
+                return None
+            chosen.append(ex)
         if not chosen:
             print(red(f"No exercise matches {' '.join(args.queries)}. Try `drill list`."))
             return None

@@ -106,6 +106,7 @@ $ drill list iterator            # by id, title, tag or mode
 $ drill run lru-cache -l cpp     # one exercise, again and again (kata)
 $ drill run graph hard           # the hard exercises about graphs
 $ drill run two-sum trie         # exact ids: both exercises
+$ drill run two-sum#2            # always its second variant
 ```
 
 A query is an exact id, or else a part of an id, a title or a tag, a mode, or
@@ -139,11 +140,12 @@ removed when the session ends.
 | `r` | rerun the tests |
 | `o` | reopen the file in the editor |
 | `l` | reopen the lesson (learn courses) |
+| `a` | all the lessons of the course so far, in one document |
 | `c` | measure the complexity of your code (exercises that support it) |
 | `q` | quit |
 
-After a solve, the next exercise starts after 3 seconds. Press `v` to read
-the reference solution first, `p` to hold, or `enter` to go right away.
+After a solve, as after a skip, drill shows the reference solution (and its
+explanation, if any) and waits: `enter` for the next exercise, `q` to quit.
 
 With VS Code, the most comfortable setup is running `drill` in the integrated
 terminal. With a terminal editor, use `-e none` and open the printed path in
@@ -228,6 +230,16 @@ A pack is scheduled like the base. A learn course is served in order: the next
 step unlocks once the current one is solved, and a step that introduces a
 concept opens its lesson (`LESSON.md`, in the editor) before the clock starts.
 Steps already solved come back for review, up to a third of the session.
+
+In a session, `l` reopens the lesson of the current step (for a step without
+one, the lesson it practises), and `a` opens every lesson reached so far in a
+single `COURSE.md`, a heading per chapter and step. Outside a session:
+
+```
+$ drill lesson automates          # every lesson reached so far
+$ drill lesson automates 3        # the lesson of step 3
+$ drill lesson automates dfa-run  # or of a step named by its id or title
+```
 
 `examples/sorting-pack.toml` is a small example pack.
 

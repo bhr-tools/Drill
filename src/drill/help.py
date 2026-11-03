@@ -31,6 +31,7 @@ Variants (×N in `drill list`)
   An exercise can have variants: the same concept on other data or with another twist,
   so that you learn the concept rather than one answer. They share the exercise's level;
   each time it comes back, drill serves the variant you practised least recently.
+  `drill run two-sum#2` serves one variant only (#1 is the exercise itself).
 
 Sessions
   drill sprint|normal|hard|optim   the base, by size of exercise
@@ -38,8 +39,10 @@ Sessions
   drill learn [name]               a course, in order: the next step unlocks once the
                                    current one is solved; a step with a new concept opens
                                    its lesson (LESSON.md) first; solved steps come back for
-                                   review, up to a third of the session
-  drill run <query>                the exercises you name
+                                   review, up to a third of the session; [l] reopens
+                                   the step's lesson, [a] all the lessons so far
+  drill lesson [name] [step]       a course's lessons, outside a session
+  drill run <query>                the exercises you name; id#2 for one variant
 
 Numbers
   time/target   your solve time over the target: 1.0× is on target, lower is faster

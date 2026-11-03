@@ -61,12 +61,31 @@ def library_values(kind: str, prefix: str) -> list[tuple[str, str]]:
         lib = Library()
         if kind in ("pack", "learn"):
             return [(c.slug, c.name) for c in lib.of_kind(kind)]
+        if kind == "lessons":  # the steps with a lesson, by their id in the course
+            return [
+                (ex.id.split(":")[-1], f"{c.name}: {ex.title}")
+                for c in lib.of_kind("learn") for ex in c.exercises if ex.lesson
+            ]
         values = [(ex.id, ex.title) for ex in lib.exercises()]
         if kind == "any":
             values += [(c.slug, f"{c.kind}: {c.name}") for c in lib.collections]
         return values
     except LibraryError:
         return []
+
+
+def variant_values(current: str) -> list[tuple[str, str]]:
+    """id#1, id#2… for the exercise written before the #."""
+    from .library import Library, LibraryError
+
+    id = current.rpartition("#")[0]
+    try:
+        ex = next((ex for ex in Library().exercises() if ex.id == id), None)
+    except LibraryError:
+        return []
+    if ex is None:
+        return []
+    return [(f"{id}#{v.variant + 1}", v.title) for v in ex.instances]
 
 
 def languages(current: str) -> list[tuple[str, str]]:
@@ -89,8 +108,12 @@ def values_for(action: argparse.Action, parser: argparse.ArgumentParser, current
         return "__files__"
     if dest == "to":
         return "__dirs__"
-    if dest == "name" and command in ("pack", "learn"):
-        return library_values(command, current)
+    if dest == "name" and command in ("pack", "learn", "lesson"):
+        return library_values("learn" if command == "lesson" else command, current)
+    if dest == "step":
+        return library_values("lessons", current)
+    if dest == "queries" and command == "run" and "#" in current:
+        return variant_values(current)
     if dest == "queries":
         return library_values("any", current)
     if dest == "target":
