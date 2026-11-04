@@ -104,7 +104,8 @@ def build_parser() -> argparse.ArgumentParser:
         description="Start a session on the exercises named by an exact id, or matching every "
                     "other query (a part of an id, a title, a tag, a mode, drill, learn). "
                     "id#2 always serves the exercise's second variant. "
-                    "A single exercise repeats, kata style.",
+                    "A sandbox: nothing is recorded, neither level nor record; the "
+                    "exercises come in turn, as long as you like.",
     )
     p.add_argument("queries", nargs="+", metavar="query")
     add_session_options(p, None)
@@ -200,7 +201,9 @@ def run_session(
             lang for lang in LANGUAGES.values() if any(ex.supports(lang.key) for ex in chosen)
         ]
     editor = None if args.editor in ("", "none") else args.editor
-    session = Session(name, chosen, langs, store, editor, args.minutes, args.keep, course)
+    session = Session(
+        name, chosen, langs, store, editor, args.minutes, args.keep, course, sandbox=name == "run"
+    )
     session.run()
     return session
 

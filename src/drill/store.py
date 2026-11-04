@@ -312,12 +312,12 @@ class Store:
 
 
 def pick(pool: list, cards: dict[tuple[str, str], Card], recent, in_order: bool = False,
-         ahead: bool = False, rng=random):
+         rng=random):
     """The next (exercise, language) pair from `pool`, or None when nothing is left.
 
     First the reviews due, most overdue first; then the exercises never done, in the
     pool's order (`in_order`) or at random. Exercises in `recent` wait while others
-    remain. With `ahead`, practise the rest instead of stopping, soonest due first.
+    remain.
     """
     now = time.time()
     fresh = [p for p in pool if p[0].id not in recent] or pool
@@ -332,6 +332,4 @@ def pick(pool: list, cards: dict[tuple[str, str], Card], recent, in_order: bool 
         new = [p for p in pairs if key(p) not in cards]
         if new:
             return new[0] if in_order else rng.choice(new)
-    if ahead:
-        return min(fresh, key=lambda p: (cards[key(p)].due, rng.random()))
     return None

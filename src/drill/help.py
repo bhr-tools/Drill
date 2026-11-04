@@ -6,10 +6,13 @@ HOW DRILL WORKS
 Practising
   drill                       the whole base (drill sprint|normal|hard|optim: one mode)
   drill learn [name]          a learn module
-  drill run <id…>             the exercises you name, as long as you like (id#2: one variant)
+  drill run <id…>             the exercises you name, in turn (id#2: one variant)
   Every session serves first what is due for review, the most overdue first, then the
   exercises you have never done (in order in a learn module, at random in the base).
   When nothing is left, the session says so and ends; q ends it before.
+  After an exercise, solved or skipped: enter goes on, r runs it again.
+  A run is a sandbox: it records nothing, neither level nor record, so replaying an
+  exercise cannot raise its score.
 
 Levels and reviews
   Each exercise has a level from 0 to 5 in each language, and comes back for review

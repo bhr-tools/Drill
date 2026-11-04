@@ -251,4 +251,4 @@ def sheet(ex: Exercise, lib: Library, store: Store, langs: list[str] | None) -> 
                 variant = f" · variant {r['variant'] + 1}" if ex.n_variants > 1 else ""
                 print(dim(f"  {'':8} {day}  {result:>7}  {r['grade']}{variant}"))
     print()
-    print(cyan(f"drill run {ex.id}") + dim("  to practise it"))
+    print(cyan(f"drill run {ex.id}") + dim("  to practise it, not recorded"))

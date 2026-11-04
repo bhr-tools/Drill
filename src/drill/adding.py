@@ -149,7 +149,7 @@ def add_exercise(lib: Library, text: str, data: dict, to: str | None, force: boo
         folder = lib.root / to if to else lib.root / "drill" / theme(exercise)
         target = folder / f"{exercise.id}.toml"
     write(lib, target, text)
-    print(f"Practise it with `drill run {exercise.id}`.")
+    print(f"It comes up in your next `drill`; `drill run {exercise.id}` tries it now, not recorded.")
     return 0
 
 

@@ -119,6 +119,11 @@ exact id.
 Without `-l`, `drill run` uses your default language when the exercises
 support it, and otherwise every language they support.
 
+A run is a sandbox: it records nothing, neither the level nor the record, so
+replaying an exercise in a loop cannot raise its score. In any session, after
+an exercise is solved or skipped, `enter` goes on and `r` runs it again in the
+sandbox; `enter` then takes you back to the session.
+
 Options for both:
 
 | Option | |
@@ -254,7 +259,7 @@ is appended to the module.
 Every session serves first what is due for review, the most overdue first,
 then the exercises you have never done: in order in a learn module, at random
 in the base. When nothing is left, the session says so and ends. `drill run`
-goes on as long as you like, kata style.
+serves its exercises in turn, as long as you like, and records nothing.
 
 ```
 Levels and reviews (the Leitner system)

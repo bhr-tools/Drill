@@ -168,12 +168,15 @@ class Session:
         minutes: float | None,
         keep: bool,
         course: Collection | None = None,
+        sandbox: bool = False,
     ):
         """A session over `exercises` (a mode's, or a search's), named `name` in the history.
 
-        `course`, a learn module, serves its new exercises in the file's order.
+        `course`, a learn module, serves its new exercises in the file's order. A `sandbox`
+        session records nothing: it serves the exercises in turn, as long as you like.
         """
         self.course = course
+        self.sandbox = sandbox
         self.name = name
         self.langs = langs
         self.store = store
@@ -185,6 +188,7 @@ class Session:
         self.ratios: list[float] = []
         self.reference_measurements: dict[tuple[str, str], Measurement | None] = {}
         self.laid_out: list[Path] = []
+        self.played: dict[tuple[str, str, int], float] = {}  # when, in this session
 
     def run(self) -> None:
         if not self.pool:
@@ -202,17 +206,20 @@ class Session:
         try:
             with term.Keys() as self.keys:
                 while self.deadline is None or time.monotonic() < self.deadline:
-                    pair = pick(
-                        self.pool, self.store.cards(), recent,
-                        in_order=self.course is not None, ahead=self.name == "run",
-                    )
+                    pair = self.next_pair(recent)
                     if pair is None:
                         term.say(green("Nothing left to practise for now: all done until the next reviews."))
                         break
                     ex, lang = pair
                     recent.append(ex.id)
-                    number += 1
-                    if not self.play(number, self.choose_variant(ex, lang), lang):
+                    sandbox = self.sandbox
+                    while True:  # [r] after an attempt: the same exercise again, as a run
+                        number += 1
+                        action = self.play(number, self.choose_variant(ex, lang), lang, sandbox)
+                        if action != "again":
+                            break
+                        sandbox = True
+                    if action == "quit":
                         break
         except KeyboardInterrupt:
             pass
@@ -224,11 +231,28 @@ class Session:
                 shutil.rmtree(self.dir, ignore_errors=True)
             self.summary()
 
+    def next_pair(self, recent) -> tuple[Exercise, Language] | None:
+        """What comes next: by the session rule, or in a sandbox the pair played least
+        recently in this session."""
+        if not self.sandbox:
+            return pick(self.pool, self.store.cards(), recent, in_order=self.course is not None)
+
+        def last(pair):
+            ex, lang = pair
+            times = [t for (e, l, _), t in self.played.items() if (e, l) == (ex.id, lang.key)]
+            return max(times, default=0.0), random.random()
+
+        return min(self.pool, key=last)
+
     def choose_variant(self, ex: Exercise, lang: Language) -> Exercise:
         """The variant practised least recently in this language, a new one first."""
         options = [v for v in ex.instances if v.supports(lang.key)]
         last = self.store.variants_seen(ex.id, lang.key)
-        return min(options, key=lambda v: (last.get(v.variant, 0.0), random.random()))
+
+        def when(v):
+            return self.played.get((ex.id, lang.key, v.variant), last.get(v.variant, 0.0))
+
+        return min(options, key=lambda v: (when(v), random.random()))
 
     def lay_out(self, ex: Exercise, lang: Language) -> Path:
         """Write the exercise's file and the files given with it; remove the last one's."""
@@ -256,15 +280,22 @@ class Session:
         kind = "new" if card is None else "review"
         return " · ".join(filter(None, [ex.chapter, rank, kind]))
 
-    def play(self, number: int, ex: Exercise, lang: Language) -> bool:
-        """Run one exercise until it is solved or skipped. Returns False to end the session."""
+    def play(self, number: int, ex: Exercise, lang: Language, sandbox: bool) -> str:
+        """Run one exercise until it is solved or skipped; in a `sandbox`, record nothing.
+
+        Returns what comes next: "next", "again" (the same exercise, as a run) or "quit".
+        """
+        self.played[(ex.id, lang.key, ex.variant)] = time.time()
         path = self.lay_out(ex, lang)
         # Generating the large inputs takes a moment: do it while the user reads
         threading.Thread(target=lambda: (ex.cases, ex.scale and ex.scale_cases), daemon=True).start()
         card = self.store.card(ex.id, lang.key)
         best = card.best if card else None
         runs, hinted, report = 0, False, []
-        step = self.step_label(ex, card) if self.course else ""
+        if sandbox:
+            step = "run · not recorded"
+        else:
+            step = self.step_label(ex, card) if self.course else ""
 
         def redraw() -> None:
             term.clear()
@@ -295,7 +326,7 @@ class Session:
             term.status(self.status_line(clock.elapsed(), ex, lang))
             key = self.keys.get(0.2)
             if key == "q":
-                return False
+                return "quit"
             if key == "o":
                 self.open_editor(path)
             elif key == "c" and ex.scale and lang.measurable:
@@ -314,52 +345,58 @@ class Session:
                 key = self.keys.wait("pq")
                 clock.resume()
                 if key == "q":
-                    return False
+                    return "quit"
             elif key == "s":
-                after = self.store.record(
-                    self.session, ex.id, lang.key, ex.mode, clock.elapsed(), ex.target,
-                    runs, hinted, skipped=True, variant=ex.variant,
-                )
                 self.n_skipped += 1
                 term.say()
-                term.say(yellow("↷ " + level_note(card, after, "Skipped")))
-                return self.reveal(ex, lang)
+                if sandbox:
+                    term.say(yellow("↷ Skipped"))
+                else:
+                    after = self.store.record(
+                        self.session, ex.id, lang.key, ex.mode, clock.elapsed(), ex.target,
+                        runs, hinted, skipped=True, variant=ex.variant,
+                    )
+                    term.say(yellow("↷ " + level_note(card, after, "Skipped")))
+                return self.reveal(ex, lang, sandbox)
             if key == "r" or watcher.changed():
                 runs += 1
                 solved_at = clock.elapsed()
                 term.status(dim("Running tests…"))
                 outcome = lang.run(ex, path, self.dir / ".build" / lang.key)
                 if outcome.passed:
-                    return self.solved(ex, lang, solved_at, runs, hinted, card)
+                    return self.solved(ex, lang, solved_at, runs, hinted, card, sandbox)
                 report = [*failure_lines(ex, lang, outcome), dim(f"  run {runs}")]
                 redraw()
 
     def solved(
         self, ex: Exercise, lang: Language, seconds: float, runs: int, hinted: bool,
-        before: Card | None,
-    ) -> bool:
+        before: Card | None, sandbox: bool,
+    ) -> str:
         best = before.best if before else None
-        card = self.store.record(
-            self.session, ex.id, lang.key, ex.mode, seconds, ex.target, runs, hinted,
-            skipped=False, variant=ex.variant,
-        )
         self.n_solved += 1
         ratio = seconds / ex.target
         self.ratios.append(ratio)
         line = green(bold(f"✓ Solved in {fmt_time(seconds)}"))
         line += dim(f"  {ratio:.1f}× target · {runs} run{'s' if runs > 1 else ''}")
-        if best is not None and not hinted:
+        if best is not None and not hinted and not sandbox:
             if seconds < best:
                 self.n_records += 1
                 line += "  " + yellow(bold(f"New record! −{fmt_time(best - seconds)}"))
             else:
                 line += dim(f"  · record {fmt_time(best)}")
+        elif best is not None and sandbox:
+            line += dim(f"  · record {fmt_time(best)}")
         term.say()
         term.say(line)
-        term.say(dim(level_note(before, card, grade_reason(seconds, ex.target, hinted, False))))
-        return self.reveal(ex, lang)
+        if not sandbox:
+            card = self.store.record(
+                self.session, ex.id, lang.key, ex.mode, seconds, ex.target, runs, hinted,
+                skipped=False, variant=ex.variant,
+            )
+            term.say(dim(level_note(before, card, grade_reason(seconds, ex.target, hinted, False))))
+        return self.reveal(ex, lang, sandbox)
 
-    def reveal(self, ex: Exercise, lang: Language, explain: bool = True) -> bool:
+    def reveal(self, ex: Exercise, lang: Language, sandbox: bool) -> str:
         code = ex.solutions.get(lang.key)
         term.say()
         if code is None:
@@ -368,12 +405,13 @@ class Session:
             term.say(cyan(f"Reference solution ({lang.label})"))
             for line in code.strip("\n").splitlines():
                 term.say(dim("│ ") + line)
-        if explain and ex.explanation:
+        if ex.explanation:
             term.say()
             for line in explanation_lines(ex):
                 term.say(line)
-        term.status(dim("[enter] next exercise  [q] quit"))
-        return self.keys.wait("\n q") != "q"
+        back = "next exercise" if self.sandbox or not sandbox else f"back to {self.kind}"
+        term.status(dim(f"[enter] {back}  [r] run it again, not recorded  [q] quit"))
+        return {"q": "quit", "r": "again"}.get(self.keys.wait("\n qr"), "next")
 
     def estimate(self, ex: Exercise, lang: Language, path: Path) -> list[str]:
         """Ask for the complexity of the code in `path`, measure it, and report.
@@ -425,6 +463,11 @@ class Session:
     def open_editor(self, path: Path) -> None:
         if self.editor and not open_in_editor(self.editor, path):
             self.editor = None
+
+    @property
+    def kind(self) -> str:
+        """What the session practises, as the user calls it."""
+        return "learn" if self.course else "drill"
 
     def summary(self) -> None:
         term.say(bold(f"Session over · {fmt_time(time.monotonic() - self.started)}"))
