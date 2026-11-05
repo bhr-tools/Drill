@@ -23,6 +23,7 @@ to it; drill refuses to start without it.
 drill/<theme>/<id>.toml   the base: exercises practised for good, one per file
                           (theme: shared, python, cpp, java, ocaml or nix)
 learn/<slug>.toml         learn modules: the practical work of a course, in order
+proba/<theme>.toml        probability problems, answered in the terminal (drill proba)
 history/<machine>.jsonl   your history: one line per attempt, one file per machine
 ```
 
@@ -68,6 +69,61 @@ name is its hostname, or `$DRILL_MACHINE`.
 
 Each mode also has language idioms (ids starting with `py-`, `cpp-`, `java-`),
 served only when you train in that language.
+
+## Probability and mental arithmetic
+
+Two drills are answered in the terminal instead of coded, for the tests of trading firms.
+
+```
+$ drill proba                 # probability problems, scheduled like the exercises
+$ drill proba jeux            # only one theme (a file of proba/), a tag or an id
+$ drill proba --list          # the problems and your level on each
+$ drill mental                # Optiver-style: 80 questions in 8 minutes
+$ drill mental zetamac        # Zetamac-style: 2 minutes of integer arithmetic
+$ drill mental --only dec,frac -m 3   # 3 minutes of decimals and fractions only
+```
+
+`drill proba` serves the problems of the library's `proba/` folder, one at a time.
+Type the answer as a number, a fraction (`1/3`), a percentage (`37.5%`) or an expression
+(`1-(5/6)^4`, `sqrt(2)/2`, `pi/4`); an approximate decimal is accepted within the problem's
+tolerance (0.1 % by default). `h` shows the hint, `s` gives up, `p` pauses, `q` quits.
+After the answer (or a skip), drill shows the worked solution and, when there is one, the
+trick: the shortcut that made a long calculation unnecessary. Problems have levels and
+reviews like the exercises (language `proba` in `drill stats`), and a wrong answer weighs
+like the hint: the attempt can no longer go up a level.
+
+`drill mental` generates its questions: integers (sums, products with the classic tricks:
+near squares, ×11, ×25, ×99), divisions, decimals, fractions and percentages. Enter alone
+skips a question, `q` stops. At the end come the score, the accuracy and speed per category,
+the slowest questions with the trick for each, and your progress. `--negative` also counts
+−1 per wrong answer. Only a test run in its preset's conditions (no `-n`, `-m` or
+`--only`) counts in the preset's history; the others are kept under their own name.
+
+A problem file holds `[[problems]]` tables:
+
+```toml
+[[problems]]
+id = "first-six"                 # unique across proba/
+title = "Attendre le premier 6"
+tags = ["géométrique"]
+target = 30                      # seconds
+statement = "On lance un dé jusqu'à obtenir un 6. Combien de lancers en moyenne ?"
+answer = "6"                     # a number, a fraction or an expression: "161/36", "pi/4"
+tolerance = 0.001                # optional, relative, for approximate answers
+hint = "…"                       # optional
+solution = """…"""               # the worked solution, shown after the answer
+trick = """…"""                  # optional: the shortcut worth remembering
+
+[[problems.variants]]            # optional: the same idea with other numbers or a twist
+title = "Attendre le premier 20"
+statement = "On lance un dé à 20 faces jusqu'à obtenir un 20. Combien de lancers en moyenne ?"
+answer = "20"
+solution = "…"                   # each key replaces the problem's; the others are inherited
+```
+
+Variants share their problem's level and schedule. Each time it comes back, drill serves
+the variant practised least recently, so that the method is learnt rather than the answer.
+`drill proba --list` shows the number of versions (`×3`).
 
 ## Languages
 

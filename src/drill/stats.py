@@ -10,6 +10,7 @@ from statistics import mean
 from .langs import LANGUAGES
 from .library import Library
 from .listing import TOP, collection_line, mastery, progress
+from .quiz import mental_stats
 from .store import DAY, Store
 from .term import bold, dim, fmt_duration, green, pad, red, spark, yellow
 
@@ -149,6 +150,7 @@ def weak_spots(rows, lib: Library) -> None:
 def show(store: Store, lib: Library) -> None:
     rows = store.attempts()
     if not rows:
+        mental_stats(store)
         print("No attempts yet. Start with `drill`, or `drill learn`.")
         return
     now = time.time()
@@ -158,6 +160,7 @@ def show(store: Store, lib: Library) -> None:
         right = sum(e["correct"] for e in estimates)
         print(f"  complexity estimates: {right}/{len(estimates)} right ({right / len(estimates):.0%})")
     print()
+    mental_stats(store)
     mastery_table(lib, store, now)
     print()
     coming_up(store, lib, now)

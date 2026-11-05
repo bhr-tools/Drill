@@ -7,6 +7,13 @@ Practising
   drill                       the whole base (drill sprint|normal|hard|optim: one mode)
   drill learn [name]          a learn module
   drill run <id…>             the exercises you name, in turn (id#2: one variant)
+  drill proba [query]         probability problems, answered in the terminal (3/8, 37.5%,
+                              1-(5/6)^4, pi/4), with the worked solution and its trick;
+                              levels and variants as for the exercises; a wrong answer
+                              counts like the hint
+  drill mental [optiver|zetamac]  a timed arithmetic test (80 questions in 8 min with
+                              decimals and fractions, or 2 min of integers); the slowest
+                              questions get their trick, the score goes to `drill stats`
   Every session serves first what is due for review, the most overdue first, then the
   exercises you have never done (in order in a learn module, at random in the base).
   When nothing is left, the session says so and ends; q ends it before.
@@ -44,8 +51,9 @@ Adding
   drill add                   checks the AI's reply (from the clipboard) and files it
   drill rm <id|module>        takes it out; its history is kept
   The library is the folder $DRILL_LIBRARY points to: drill/ for the base, learn/ for
-  the modules, history/ for your attempts. With a git remote, drill pulls when it
-  starts, and pushes after a session, an add or a rm ($DRILL_SYNC=0 turns this off).
+  the modules, proba/ for the probability problems, history/ for your attempts. With a
+  git remote, drill pulls when it starts, and pushes after a session, an add or a rm
+  ($DRILL_SYNC=0 turns this off).
 
 Numbers
   time/target   your solve time over the target: 1.0× is on target, lower is faster

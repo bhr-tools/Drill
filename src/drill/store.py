@@ -55,6 +55,16 @@ CREATE TABLE IF NOT EXISTS estimates (
     slope REAL NOT NULL,
     correct INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS mental (
+    id INTEGER PRIMARY KEY,
+    finished REAL NOT NULL,
+    preset TEXT NOT NULL,
+    asked INTEGER NOT NULL,
+    correct INTEGER NOT NULL,
+    wrong INTEGER NOT NULL,
+    seconds REAL NOT NULL,
+    detail TEXT NOT NULL      -- JSON: per category, [asked, correct, seconds]
+);
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS cards (
     exercise TEXT NOT NULL,
@@ -187,7 +197,7 @@ class Store:
         entries.sort(key=lambda e: e.get("finished", 0))
         cards: dict[tuple[str, str], Card] = {}
         with self.db:
-            for table in ("attempts", "estimates", "cards"):
+            for table in ("attempts", "estimates", "cards", "mental"):
                 self.db.execute(f"DELETE FROM {table}")
             for e in entries:
                 if e.get("type") == "estimate":
@@ -198,6 +208,11 @@ class Store:
                          ",".join(e["measured"]), e["slope"], e["correct"]),
                     )
                     continue
+                if e.get("type") == "mental":
+                    self._insert_mental(e)
+                    continue
+                if e.get("type", "attempt") != "attempt":
+                    continue  # written by a newer drill
                 key = (e["exercise"], e["lang"])
                 cards[key] = advance(cards.get(key), *key, e)
                 self.db.execute(
@@ -268,6 +283,31 @@ class Store:
                  entry["correct"]),
             )
         self.append(entry)
+
+    def _insert_mental(self, e: dict) -> None:
+        self.db.execute(
+            "INSERT INTO mental (finished, preset, asked, correct, wrong, seconds, detail)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (e["finished"], e["preset"], e["asked"], e["correct"], e["wrong"], e["seconds"],
+             json.dumps(e["detail"])),
+        )
+
+    def record_mental(
+        self, preset: str, asked: int, correct: int, wrong: int, seconds: float, detail: dict
+    ) -> None:
+        """Store the result of a mental arithmetic test."""
+        entry = {"type": "mental", "finished": time.time(), "preset": preset, "asked": asked,
+                 "correct": correct, "wrong": wrong, "seconds": seconds, "detail": detail}
+        with self.db:
+            self._insert_mental(entry)
+        self.append(entry)
+
+    def mentals(self, preset: str | None = None) -> list[sqlite3.Row]:
+        if preset is None:
+            return self.db.execute("SELECT * FROM mental ORDER BY finished").fetchall()
+        return self.db.execute(
+            "SELECT * FROM mental WHERE preset = ? ORDER BY finished", (preset,)
+        ).fetchall()
 
     def estimates(self) -> list[sqlite3.Row]:
         return self.db.execute("SELECT * FROM estimates ORDER BY finished").fetchall()

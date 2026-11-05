@@ -9,7 +9,7 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
-from . import adding, completion, listing, prompt, stats, sync
+from . import adding, completion, listing, prompt, quiz, stats, sync
 from .checking import check, copy_to_clipboard
 from .exercises import MODES, Exercise
 from .help import HELP
@@ -34,6 +34,50 @@ def parse_langs(spec: str) -> list[Language]:
             )
         langs.append(LANGUAGES[name])
     return langs
+
+
+def parse_categories(spec: str) -> list[str]:
+    cats = [c.strip() for c in spec.split(",") if c.strip()]
+    unknown = [c for c in cats if c not in quiz.CATEGORIES]
+    if unknown or not cats:
+        raise argparse.ArgumentTypeError(
+            f"unknown category {', '.join(unknown) or spec!r} (choose from "
+            f"{', '.join(quiz.CATEGORIES)})"
+        )
+    return cats
+
+
+def quiz_command(parser, args, root: Path, store: Store) -> int:
+    """`drill proba` and `drill mental`."""
+    if args.command == "mental":
+        if not sys.stdin.isatty():
+            parser.error("a test needs an interactive terminal")
+        preset = quiz.PRESETS[args.preset]
+        count = args.count if args.count is not None else preset.count
+        session = quiz.MentalSession(
+            store, preset, count, args.minutes or preset.minutes, args.only, args.negative
+        )
+        session.run()
+        sync.push(root, f"{session.name}, {session.n_solved} right")
+        return 0
+    problems, errors = quiz.load_problems(root)
+    for error in errors:
+        print(f"drill: skipping {error}", file=sys.stderr)
+    if args.queries:
+        problems = [p for p in problems if all(p.matches(q) for q in args.queries)]
+    if not problems:
+        where = f" matching {' '.join(args.queries)}" if args.queries else " in proba/"
+        print(red(f"No probability problem{where}."))
+        return 1
+    if args.list:
+        quiz.list_problems(problems, store)
+        return 0
+    if not sys.stdin.isatty():
+        parser.error("a session needs an interactive terminal")
+    session = quiz.ProbaSession(problems, store, args.minutes)
+    session.run()
+    sync.push(root, f"proba session, {session.n_solved} solved")
+    return 0
 
 
 def default_editor() -> str | None:
@@ -109,6 +153,32 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("queries", nargs="+", metavar="query")
     add_session_options(p, None)
+
+    p = sub.add_parser(
+        "proba", help="probability problems, answered in the terminal",
+        description="Probability problems from the library's proba/ folder, scheduled like the "
+                    "exercises. Answer in the terminal; the worked solution and its trick follow.",
+    )
+    p.add_argument("queries", nargs="*", metavar="query",
+                   help="only problems matching every query: a theme, a tag, a part of an id")
+    p.add_argument("-m", "--minutes", type=float, help="end the session after this many minutes")
+    p.add_argument("--list", action="store_true", help="list the problems and your levels")
+
+    p = sub.add_parser(
+        "mental", help="a timed mental arithmetic test (Optiver, Zetamac)",
+        description="A mental arithmetic test: Optiver-style (80 questions in 8 minutes, decimals "
+                    "and fractions) or Zetamac-style (2 minutes of integers). Scores go in the "
+                    "history and in `drill stats`.",
+    )
+    p.add_argument("preset", nargs="?", choices=list(quiz.PRESETS), default="optiver",
+                   help="optiver (default) or zetamac")
+    p.add_argument("-n", "--count", type=int, help="number of questions (default: the preset's)")
+    p.add_argument("-m", "--minutes", type=float, help="time allowed (default: the preset's)")
+    p.add_argument(
+        "--only", type=parse_categories,
+        help=f"only these categories, comma-separated: {', '.join(quiz.CATEGORIES)}",
+    )
+    p.add_argument("--negative", action="store_true", help="also score −1 per wrong answer")
 
     p = sub.add_parser(
         "list", help="the exercises and your progress on each",
@@ -316,7 +386,7 @@ def main(argv: list[str] | None = None) -> int:
     if command == "prompt" and args.kind != "variant":
         return prompt_command(parser, args, library)
     root = library().root
-    sync.pull(root, force=command in (*sessions, "add", "rm"))
+    sync.pull(root, force=command in (*sessions, "proba", "mental", "add", "rm"))
     lib = Library(root)
     if command == "prompt":
         return prompt_command(parser, args, lambda: lib)
@@ -331,6 +401,8 @@ def main(argv: list[str] | None = None) -> int:
     lib.warn()
     store = Store(root / "history")
 
+    if command in ("proba", "mental"):
+        return quiz_command(parser, args, root, store)
     if command in sessions:
         session = start(parser, args, lib, store)
         if session is None:

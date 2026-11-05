@@ -55,7 +55,8 @@ def check(exercises: list[Exercise], langs: list[Language]) -> list[str]:
         code = lang.reference(ex)
         if code is None:
             return None
-        work = root / f"{ex.key}-{lang.key}"
+        # ":" (in pack and course ids) would split a Java classpath
+        work = root / f"{ex.key.replace(':', '_')}-{lang.key}"
         work.mkdir()
         source = work / lang.filename_for(ex)
         source.write_text(code)
